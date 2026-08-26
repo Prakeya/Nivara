@@ -1,8 +1,6 @@
-# LEDGERMIND — AI Settlement Intelligence Agent
+# Nivara — AI Settlement Intelligence Agent
 
 **Track:** Razorpay Buildathon Track 04 — AI Finance Controller  
-**Status:** Implementation in progress  
-**Architecture Version:** 1.3 (Frozen)
 
 ---
 
@@ -16,9 +14,9 @@ Most "AI reconciliation" tools dump raw CSV into an LLM and ask "does this match
 
 ---
 
-## What LEDGERMIND Does
+## What Nivara Does
 
-LEDGERMIND reconciles Razorpay settlements across four CSV sources:
+Nivara reconciles Razorpay settlements across four CSV sources:
 
 - `transactions.csv` — captured payments
 - `refunds.csv` — refund records  
@@ -48,7 +46,7 @@ It processes a batch of 50+ settlements and reports:
 
 ## Why This Is Not an LLM Wrapper
 
-| Wrapper Behavior | LEDGERMIND Behavior |
+| Wrapper Behavior | Nivara Behavior |
 |---|---|
 | Dumps raw CSV into LLM | Sends structured evidence packet with pre-computed amounts |
 | LLM calculates `expected = payments - refunds` | Python calculates expected amount; LLM never sees raw numbers |
@@ -207,7 +205,7 @@ This runs the full pipeline against ground truth and reports:
 ## Project Structure
 
 ```
-ledgermind/
+Nivara/
 ├── backend/
 │   ├── main.py              # FastAPI endpoints
 │   ├── models.py            # Pydantic data models (strict, validated)
