@@ -28,7 +28,7 @@ function BatchPatterns({ patterns }) {
       <div className="card-header">
         <div>
           <div className="card-title">Batch Patterns</div>
-          <div className="card-subtitle">{patterns.length} cross-settlement pattern{patterns.length !== 1 ? 's' : ''} detected</div>
+          <div className="card-subtitle">{patterns.length} cross-settlement pattern{patterns.length !== 1 ? 's' : ''} detected &bull; Rule-based detection, not LLM-driven</div>
         </div>
       </div>
 
@@ -51,6 +51,10 @@ function BatchPatterns({ patterns }) {
           </div>
         </div>
       ))}
+
+      <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--gray-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border-light)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+        <strong>Note:</strong> Pattern detection is rule-based (deterministic frequency analysis), not LLM-driven. Patterns surface cross-settlement anomalies that humans may miss.
+      </div>
     </div>
   );
 }

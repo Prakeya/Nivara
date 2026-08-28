@@ -1,430 +1,72 @@
 [
   {
-    "settlement_id": "SETL_0001",
+    "settlement_id": "SETL_001",
     "label": "clean_match",
-    "expected_amount_paise": 39604,
-    "actual_amount_paise": 39604,
+    "expected_amount_paise": 50000,
+    "actual_amount_paise": 50000,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0002",
+    "settlement_id": "SETL_002",
     "label": "clean_match",
-    "expected_amount_paise": 748324,
-    "actual_amount_paise": 748324,
+    "expected_amount_paise": 77994,
+    "actual_amount_paise": 77994,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0003",
-    "label": "clean_match",
-    "expected_amount_paise": 1194750,
-    "actual_amount_paise": 1194750,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0004",
-    "label": "clean_match",
-    "expected_amount_paise": 162085,
-    "actual_amount_paise": 162085,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0005",
-    "label": "clean_match",
-    "expected_amount_paise": 1130788,
-    "actual_amount_paise": 1130788,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0006",
-    "label": "clean_match",
-    "expected_amount_paise": 498432,
-    "actual_amount_paise": 498432,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0007",
-    "label": "clean_match",
-    "expected_amount_paise": 629979,
-    "actual_amount_paise": 629979,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0008",
-    "label": "clean_match",
-    "expected_amount_paise": 405982,
-    "actual_amount_paise": 405982,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0009",
-    "label": "clean_match",
-    "expected_amount_paise": 404979,
-    "actual_amount_paise": 404979,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0010",
-    "label": "clean_match",
-    "expected_amount_paise": 970426,
-    "actual_amount_paise": 970426,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0011",
-    "label": "clean_match",
-    "expected_amount_paise": 1044988,
-    "actual_amount_paise": 1044988,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0012",
-    "label": "clean_match",
-    "expected_amount_paise": 1091500,
-    "actual_amount_paise": 1091500,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0013",
-    "label": "clean_match",
-    "expected_amount_paise": 966798,
-    "actual_amount_paise": 966798,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0014",
-    "label": "clean_match",
-    "expected_amount_paise": 696034,
-    "actual_amount_paise": 696034,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0015",
-    "label": "clean_match",
-    "expected_amount_paise": 138485,
-    "actual_amount_paise": 138485,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0016",
-    "label": "clean_match",
-    "expected_amount_paise": 453376,
-    "actual_amount_paise": 453376,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0017",
-    "label": "clean_match",
-    "expected_amount_paise": 479332,
-    "actual_amount_paise": 479332,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0018",
-    "label": "clean_match",
-    "expected_amount_paise": 1031191,
-    "actual_amount_paise": 1031191,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0019",
-    "label": "clean_match",
-    "expected_amount_paise": 319565,
-    "actual_amount_paise": 319565,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0020",
-    "label": "clean_match",
-    "expected_amount_paise": 719346,
-    "actual_amount_paise": 719346,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0021",
-    "label": "clean_match",
-    "expected_amount_paise": 386046,
-    "actual_amount_paise": 386046,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0022",
-    "label": "clean_match",
-    "expected_amount_paise": 79731,
-    "actual_amount_paise": 79731,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0023",
-    "label": "clean_match",
-    "expected_amount_paise": 238280,
-    "actual_amount_paise": 238280,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0024",
-    "label": "clean_match",
-    "expected_amount_paise": 98896,
-    "actual_amount_paise": 98896,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0025",
-    "label": "clean_match",
-    "expected_amount_paise": 847478,
-    "actual_amount_paise": 847478,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0026",
-    "label": "clean_match",
-    "expected_amount_paise": 225032,
-    "actual_amount_paise": 225032,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0027",
-    "label": "clean_match",
-    "expected_amount_paise": 74822,
-    "actual_amount_paise": 74822,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0028",
-    "label": "clean_match",
-    "expected_amount_paise": 263225,
-    "actual_amount_paise": 263225,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0029",
-    "label": "clean_match",
-    "expected_amount_paise": 374734,
-    "actual_amount_paise": 374734,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0030",
-    "label": "clean_match",
-    "expected_amount_paise": 786722,
-    "actual_amount_paise": 786722,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0031",
+    "settlement_id": "SETL_003",
     "label": "missing_reference",
-    "expected_amount_paise": 0,
-    "actual_amount_paise": 29016,
-    "difference_paise": 29016
-  },
-  {
-    "settlement_id": "SETL_0032",
-    "label": "missing_reference",
-    "expected_amount_paise": 0,
-    "actual_amount_paise": 157585,
-    "difference_paise": 157585
-  },
-  {
-    "settlement_id": "SETL_0033",
-    "label": "missing_reference",
-    "expected_amount_paise": 0,
-    "actual_amount_paise": 65877,
-    "difference_paise": 65877
-  },
-  {
-    "settlement_id": "SETL_0034",
-    "label": "missing_reference",
-    "expected_amount_paise": 0,
-    "actual_amount_paise": 101490,
-    "difference_paise": 101490
-  },
-  {
-    "settlement_id": "SETL_0035",
-    "label": "missing_reference",
-    "expected_amount_paise": 0,
-    "actual_amount_paise": 84707,
-    "difference_paise": 84707
-  },
-  {
-    "settlement_id": "SETL_0035",
-    "label": "duplicate_settlement",
-    "expected_amount_paise": 1001926,
-    "actual_amount_paise": 1001926,
+    "expected_amount_paise": 149174,
+    "actual_amount_paise": 149174,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0009",
-    "label": "duplicate_settlement",
-    "expected_amount_paise": 450565,
-    "actual_amount_paise": 450565,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0038",
+    "settlement_id": "SETL_004",
     "label": "bank_mismatch",
-    "expected_amount_paise": 901936,
-    "actual_amount_paise": 901936,
+    "expected_amount_paise": 43820,
+    "actual_amount_paise": 43820,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0039",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 50517,
-    "actual_amount_paise": 50517,
+    "settlement_id": "SETL_005",
+    "label": "fee_mismatch",
+    "expected_amount_paise": 95000,
+    "actual_amount_paise": 95000,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0040",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 654461,
-    "actual_amount_paise": 654461,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0041",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 624326,
-    "actual_amount_paise": 624326,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0042",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 556853,
-    "actual_amount_paise": 556853,
-    "difference_paise": 0
-  },
-  {
-    "settlement_id": "SETL_0043",
-    "label": "fee_mismatch",
-    "expected_amount_paise": 1597018,
-    "actual_amount_paise": 1597033,
-    "difference_paise": 15,
-    "mismatched_payment_id": "PAY_0043_00"
-  },
-  {
-    "settlement_id": "SETL_0044",
-    "label": "fee_mismatch",
-    "expected_amount_paise": 894488,
-    "actual_amount_paise": 894485,
-    "difference_paise": -3,
-    "mismatched_payment_id": "PAY_0044_00"
-  },
-  {
-    "settlement_id": "SETL_0045",
-    "label": "fee_mismatch",
-    "expected_amount_paise": 257252,
-    "actual_amount_paise": 257226,
-    "difference_paise": -26,
-    "mismatched_payment_id": "PAY_0045_00"
-  },
-  {
-    "settlement_id": "SETL_0046",
-    "label": "fee_mismatch",
-    "expected_amount_paise": 867965,
-    "actual_amount_paise": 867963,
-    "difference_paise": -2,
-    "mismatched_payment_id": "PAY_0046_00"
-  },
-  {
-    "settlement_id": "SETL_0047",
-    "label": "fee_mismatch",
-    "expected_amount_paise": 918747,
-    "actual_amount_paise": 918704,
-    "difference_paise": -43,
-    "mismatched_payment_id": "PAY_0047_00"
-  },
-  {
-    "settlement_id": "SETL_0048",
+    "settlement_id": "SETL_006",
     "label": "tax_inconsistency",
-    "expected_amount_paise": 1312493,
-    "actual_amount_paise": 1312505,
-    "difference_paise": 12,
-    "mismatched_payment_id": "PAY_0048_00"
+    "expected_amount_paise": 58466,
+    "actual_amount_paise": 58466,
+    "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0049",
-    "label": "tax_inconsistency",
-    "expected_amount_paise": 996296,
-    "actual_amount_paise": 996286,
-    "difference_paise": -10,
-    "mismatched_payment_id": "PAY_0049_00"
-  },
-  {
-    "settlement_id": "SETL_0050",
-    "label": "tax_inconsistency",
-    "expected_amount_paise": 1377986,
-    "actual_amount_paise": 1377996,
-    "difference_paise": 10,
-    "mismatched_payment_id": "PAY_0050_00"
-  },
-  {
-    "settlement_id": "SETL_0051",
+    "settlement_id": "SETL_007",
     "label": "refund_timing",
-    "expected_amount_paise": 381799,
-    "actual_amount_paise": 381499,
-    "difference_paise": -300
+    "expected_amount_paise": 70000,
+    "actual_amount_paise": 68000,
+    "difference_paise": -2000
   },
   {
-    "settlement_id": "SETL_0052",
-    "label": "refund_timing",
-    "expected_amount_paise": 362916,
-    "actual_amount_paise": 364456,
-    "difference_paise": 1540
+    "settlement_id": "SETL_008",
+    "label": "timing_mismatch",
+    "expected_amount_paise": 53584,
+    "actual_amount_paise": 53584,
+    "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0053",
-    "label": "refund_timing",
-    "expected_amount_paise": 328482,
-    "actual_amount_paise": 332470,
-    "difference_paise": 3988
-  },
-  {
-    "settlement_id": "SETL_0054",
-    "label": "refund_timing",
-    "expected_amount_paise": 481587,
-    "actual_amount_paise": 477063,
-    "difference_paise": -4524
-  },
-  {
-    "settlement_id": "SETL_0055",
-    "label": "refund_timing",
-    "expected_amount_paise": 335688,
-    "actual_amount_paise": 330804,
-    "difference_paise": -4884
-  },
-  {
-    "settlement_id": "SETL_0056",
+    "settlement_id": "SETL_009",
     "label": "unexplained",
-    "expected_amount_paise": 827827,
-    "actual_amount_paise": 818380,
-    "difference_paise": -9447
+    "expected_amount_paise": 37000,
+    "actual_amount_paise": 36500,
+    "difference_paise": -500
   },
   {
-    "settlement_id": "SETL_0057",
-    "label": "unexplained",
-    "expected_amount_paise": 915943,
-    "actual_amount_paise": 919147,
-    "difference_paise": 3204
-  },
-  {
-    "settlement_id": "SETL_0058",
-    "label": "unexplained",
-    "expected_amount_paise": 649524,
-    "actual_amount_paise": 642002,
-    "difference_paise": -7522
-  },
-  {
-    "settlement_id": "SETL_0059",
-    "label": "unexplained",
-    "expected_amount_paise": 338935,
-    "actual_amount_paise": 344964,
-    "difference_paise": 6029
-  },
-  {
-    "settlement_id": "SETL_0060",
-    "label": "unexplained",
-    "expected_amount_paise": 622078,
-    "actual_amount_paise": 620454,
-    "difference_paise": -1624
+    "settlement_id": "SETL_010",
+    "label": "same_day_duplicates",
+    "expected_amount_paise": 0,
+    "actual_amount_paise": 0,
+    "difference_paise": 0
   }
 ]

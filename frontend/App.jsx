@@ -37,9 +37,14 @@ function ReconciliationTrace({ result, onBack }) {
         <div>
           <button className="btn btn-sm" onClick={onBack}>&larr; Back to results</button>
         </div>
-        <span className={`badge ${isClean ? "clean" : ai ? "review" : "exception"}`}>
-          {ai ? "AI Investigated" : isClean ? "Clean Match" : "Deterministic Rule"}
-        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {result.ai_mode === "demo" && (
+            <span className="badge mock-tag">DETERMINISTIC DEMO</span>
+          )}
+          <span className={`badge ${isClean ? "clean" : ai ? "review" : "exception"}`}>
+            {ai ? (result.ai_mode === "demo" ? "Deterministic Classification" : "AI Investigated") : isClean ? "Clean Match" : "Deterministic Rule"}
+          </span>
+        </div>
       </div>
 
       <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 16, fontFamily: "'SF Mono', monospace" }}>
@@ -63,10 +68,10 @@ function ReconciliationTrace({ result, onBack }) {
 
       {ai && (
         <div className="ai-section">
-          <h4>AI Investigation</h4>
+          <h4>{result.ai_mode === "demo" ? "Deterministic Demo (Heuristic Classification)" : "AI Investigation"}</h4>
           <div className="trace-box" style={{ background: '#1e1b4b' }}>
             <div><span className="t-label">Classification</span>  <span className="t-dim"> </span> <span style={{color:'#c084fc'}}>{ai.classification}</span></div>
-            <div><span className="t-label">Confidence</span>     <span className="t-dim">    </span> <span style={{color:'#c084fc'}}>{(ai.raw_confidence * 100).toFixed(0)}%</span></div>
+            <div><span className="t-label">Confidence</span>     <span className="t-dim">    </span> <span style={{color:'#c084fc'}}>{result.ai_mode === "demo" ? "Heuristic" : `${(ai.raw_confidence * 100).toFixed(0)}%`}</span></div>
             <div><span className="t-label">Action</span>         <span className="t-dim">       </span> <span style={{color:'#fbbf24'}}>{ai.recommended_action}</span></div>
             <div className="trace-sep">{'\u2500'.repeat(48)}</div>
             <div><span className="t-label">Explanation</span></div>

@@ -507,8 +507,8 @@ class TestProductionLLMPath:
         sig = inspect.signature(run_engine)
         assert "llm_client" in sig.parameters
 
-    def test_engine_none_llm_produces_unresolved(self):
-        """When llm_client is None, MATH_DISCREPANCY becomes UNRESOLVED."""
+    def test_engine_none_llm_falls_back_to_demo(self):
+        """When llm_client is None, DemoLLMClient is used as fallback."""
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
         bc = _bank_credit("UTR_001", 100500)
@@ -516,8 +516,10 @@ class TestProductionLLMPath:
         results = run_engine([t], [s], [], [bc], llm_client=None)
 
         assert len(results) == 1
-        assert results[0].decision == DecisionState.UNRESOLVED
+        assert results[0].decision == DecisionState.REVIEW_REQUIRED
         assert results[0].escalate_to_human is True
+        assert results[0].ai_mode == "demo"
+        assert results[0].ai_response is not None
 
     def test_engine_mock_llm_produces_review_required(self):
         """When MockLLMClient is provided, MATH_DISCREPANCY becomes REVIEW_REQUIRED."""
@@ -540,31 +542,32 @@ class TestProductionLLMPath:
         assert results[0].ai_response is not None
         assert results[0].escalate_to_human is True
 
-    def test_missing_api_key_returns_none_client(self):
-        """_get_llm_client() returns None when OPENAI_API_KEY is not set."""
+    def test_missing_api_key_returns_demo_client(self):
+        """_get_llm_client() returns DemoLLMClient when OPENAI_API_KEY is not set."""
         import os
         from backend.main import _get_llm_client
+        from backend.ai_investigator import DemoLLMClient
 
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
             client = _get_llm_client()
-            assert client is None
+            assert isinstance(client, DemoLLMClient)
         finally:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key
 
-    def test_invalid_api_key_returns_none_client(self):
-        """_get_llm_client() returns None when OpenAIClient instantiation fails."""
+    def test_invalid_api_key_returns_demo_client(self):
+        """_get_llm_client() returns DemoLLMClient when OpenAIClient instantiation fails."""
         import os
         from backend.main import _get_llm_client
+        from backend.ai_investigator import DemoLLMClient
 
         old_key = os.environ.get("OPENAI_API_KEY")
         os.environ["OPENAI_API_KEY"] = "sk-test-invalid-key-for-testing"
         try:
-            # Should not crash - returns None or OpenAIClient (both are valid)
+            # Should not crash - returns DemoLLMClient (heuristic fallback)
             client = _get_llm_client()
-            # Client is either None (if openai not installed) or OpenAIClient
-            assert client is None or hasattr(client, "complete")
+            assert isinstance(client, DemoLLMClient) or hasattr(client, "complete")
         finally:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key

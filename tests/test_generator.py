@@ -88,7 +88,7 @@ class TestIntegerArithmetic:
 class TestGenerateBatch:
     def test_default_60_settlements(self):
         data = generate_batch()
-        assert len(data["settlements"]) == 60
+        assert len(data["settlements"]) == 80
 
     def test_ground_truth_count_matches_settlements(self):
         data = generate_batch()
@@ -101,12 +101,15 @@ class TestGenerateBatch:
         dist = Counter(labels)
         assert dist["clean_match"] == 30
         assert dist["missing_reference"] == 5
-        assert dist["duplicate_settlement"] == 2
         assert dist["bank_mismatch"] == 5
         assert dist["fee_mismatch"] == 5
         assert dist["tax_inconsistency"] == 3
         assert dist["refund_timing"] == 5
-        assert dist["unexplained"] == 5
+        assert dist["unexplained"] == 8
+        assert dist["adjustment_entry"] == 5
+        assert dist["refund_after_settlement"] == 5
+        assert dist["timing_race"] == 5
+        assert dist["partial_settlement"] == 4
 
     def test_ground_truth_has_required_fields(self):
         data = generate_batch()

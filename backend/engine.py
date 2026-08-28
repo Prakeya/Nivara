@@ -15,6 +15,7 @@ Checks (in order):
 9. Amount cross-check
 10. Expected amount calculation
 11. Difference calculation
+12. Adjustment consistency (if adjustment declared, must bridge the gap)
 
 Outcomes:
 - CLEAN_MATCH: difference == 0, all checks pass
@@ -58,15 +59,17 @@ def compute_tax(fee: int) -> int:
 def _make_exception(
     settlement_id: str,
     actual_amount: int,
+    expected_amount: int,
+    difference: int,
     checks_passed: list[str],
     checks_failed: list[str],
 ) -> ReconciliationResult:
-    """Build a DETERMINISTIC_EXCEPTION result."""
+    """Build a DETERMINISTIC_EXCEPTION result with correct financial values."""
     return ReconciliationResult(
         settlement_id=settlement_id,
         decision=DecisionState.DETERMINISTIC_EXCEPTION,
-        difference_paise=0,
-        expected_amount_paise=actual_amount,
+        difference_paise=difference,
+        expected_amount_paise=expected_amount,
         actual_amount_paise=actual_amount,
         deterministic_checks_passed=checks_passed,
         deterministic_checks_failed=checks_failed,
@@ -154,6 +157,14 @@ def reconcile_settlement(
     checks_passed: list[str] = []
     checks_failed: list[str] = []
 
+    # ── Pre-compute expected amount and difference (always visible) ──
+    total_payments = sum(p["amount"] for p in linked_payments)
+    total_refunds = sum(r["amount"] for r in linked_refunds)
+    total_fees = sum(p["fee"] for p in linked_payments)
+    total_tax = sum(p["tax"] for p in linked_payments)
+    expected_amount = total_payments - total_refunds - total_fees - total_tax
+    difference = actual_amount - expected_amount
+
     # ── Check 1: Schema & validation ──
     # Handled by ingestion; assumed valid here
     checks_passed.append("schema_validation")
@@ -169,7 +180,7 @@ def reconcile_settlement(
     ]
     if relevant_dupes:
         checks_failed.append("duplicate_detection")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("duplicate_detection")
 
@@ -180,7 +191,7 @@ def reconcile_settlement(
     ]
     if ref_errors:
         checks_failed.append("reference_existence")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("reference_existence")
 
@@ -196,7 +207,7 @@ def reconcile_settlement(
     ]
     if linkage_consistency_errors:
         checks_failed.append("linkage_consistency")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("linkage_consistency")
 
@@ -210,7 +221,7 @@ def reconcile_settlement(
 
     if fee_mismatches:
         checks_failed.append("fee_validation")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("fee_validation")
 
@@ -223,14 +234,14 @@ def reconcile_settlement(
 
     if tax_mismatches:
         checks_failed.append("tax_validation")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("tax_validation")
 
     # ── Check 7: Bank credit existence ──
     if bank_credit is None:
         checks_failed.append("bank_credit_existence")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("bank_credit_existence")
 
@@ -239,29 +250,47 @@ def reconcile_settlement(
     bank_utr = bank_credit.get("utr")
     if settlement_utr and bank_utr and settlement_utr != bank_utr:
         checks_failed.append("utr_cross_check")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("utr_cross_check")
 
     # ── Check 9: Amount cross-check ──
     if bank_credit["amount"] != actual_amount:
         checks_failed.append("amount_cross_check")
-        return _make_exception(settlement_id, actual_amount, checks_passed, checks_failed)
+        return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("amount_cross_check")
 
     # ── Check 10 & 11: Expected amount and difference ──
-    # Always compute expected amount (model requires difference == actual - expected)
-    total_payments = sum(p["amount"] for p in linked_payments)
-    total_refunds = sum(r["amount"] for r in linked_refunds)
-    total_fees = sum(p["fee"] for p in linked_payments)
-    total_tax = sum(p["tax"] for p in linked_payments)
-
-    expected_amount = total_payments - total_refunds - total_fees - total_tax
-    difference = actual_amount - expected_amount
-
+    # Expected amount and difference are pre-computed at the top of this function
+    # so they are always visible even when earlier checks fail (DETERMINISTIC_EXCEPTION).
     checks_passed.append("expected_amount_calculation")
     checks_passed.append("difference_calculation")
+
+    # ── Check 12: Adjustment consistency ──
+    # If the settlement declares an adjustment amount, verify it accounts for
+    # the difference between actual and expected. Adjustments are legitimate
+    # finance ops corrections (chargebacks, manual adjustments) that must be
+    # explicitly declared — silent mismatches are never acceptable.
+    adjustment_amount = settlement.get("adjustment_amount", 0) or 0
+    if adjustment_amount != 0:
+        # Adjustment should bridge the gap: actual == expected + adjustment
+        if adjustment_amount != difference:
+            checks_failed.append("adjustment_consistency")
+            return ReconciliationResult(
+                settlement_id=settlement_id,
+                decision=DecisionState.DETERMINISTIC_EXCEPTION,
+                difference_paise=difference,
+                expected_amount_paise=expected_amount,
+                actual_amount_paise=actual_amount,
+                deterministic_checks_passed=checks_passed,
+                deterministic_checks_failed=checks_failed,
+                escalate_to_human=True,
+            )
+        else:
+            checks_passed.append("adjustment_consistency")
+    else:
+        checks_passed.append("adjustment_consistency")
 
     # ── If any check failed → DETERMINISTIC_EXCEPTION ──
     if checks_failed:
@@ -318,12 +347,12 @@ def run_engine(
     1. Links entities (reuses Phase 3)
     2. Detects duplicates (reuses Phase 2 logic)
     3. Reconciles each settlement
-    4. Investigates MATH_DISCREPANCY cases with AI (if llm_client provided)
+    4. Investigates MATH_DISCREPANCY and DETERMINISTIC_EXCEPTION cases with AI
     5. Catches crashes → UNPROCESSED
 
     Args:
-        llm_client: LLM provider for AI investigation. If None, MATH_DISCREPANCY
-            cases are escalated as UNRESOLVED without AI analysis. In production,
+        llm_client: LLM provider for AI investigation. If None, falls back to
+            DemoLLMClient (deterministic heuristic classifier). In production,
             pass OpenAIClient; in tests, pass MockLLMClient.
     """
     from backend.linking import link_entities
@@ -370,24 +399,52 @@ def run_engine(
                 settlement_id=settlement["settlement_id"],
                 decision=DecisionState.UNPROCESSED,
                 difference_paise=0,
-                expected_amount_paise=settlement["amount"],
-                actual_amount_paise=settlement["amount"],
+                expected_amount_paise=max(1, settlement.get("amount", 1)),
+                actual_amount_paise=max(1, settlement.get("amount", 1)),
                 deterministic_checks_passed=[],
                 deterministic_checks_failed=["engine_crash"],
                 escalate_to_human=True,
             ))
 
-    # Phase 7: AI investigation for MATH_DISCREPANCY cases
-    from backend.ai_investigator import investigate
+    # Phase 7: AI investigation for MATH_DISCREPANCY and DETERMINISTIC_EXCEPTION cases
+    from backend.ai_investigator import investigate, DemoLLMClient
     from backend.models import (
         EvidencePacket, LinkedPaymentsSummary, LinkedRefundsSummary,
         FeesSummary, TaxSummary, BankCreditEvidence, TimingEvidence,
-        PaymentMethod, ValidationResult,
+        PaymentMethod, ValidationResult, PaymentDetail, CrossSettlementContext,
     )
     from datetime import datetime
 
+    effective_llm_client = llm_client if llm_client is not None else DemoLLMClient()
+
+    # Build cross-settlement statistics (data the per-settlement engine cannot see)
+    total_results = len(results)
+    fee_exception_count = sum(
+        1 for r in results if "fee_validation" in r.deterministic_checks_failed
+    )
+    refund_count = sum(
+        1 for r in results
+        if r.decision in (DecisionState.MATH_DISCREPANCY, DecisionState.REVIEW_REQUIRED)
+        and r.ai_response and r.ai_response.classification.value == "REFUND_TIMING"
+    )
+    math_disc_count = sum(
+        1 for r in results if r.decision == DecisionState.MATH_DISCREPANCY
+    )
+    batch_fee_exception_rate = fee_exception_count / total_results if total_results else 0
+    batch_refund_rate = refund_count / total_results if total_results else 0
+    batch_math_disc_rate = math_disc_count / total_results if total_results else 0
+
+    # Method mix across entire batch
+    method_counter: dict[str, int] = {}
+    for settlement in settlements:
+        lr = linkage_by_sid.get(settlement["settlement_id"])
+        if lr:
+            for p in lr.linked_payments:
+                m = p.get("method", "unknown")
+                method_counter[m] = method_counter.get(m, 0) + 1
+
     for result in results:
-        if result.decision == DecisionState.MATH_DISCREPANCY:
+        if result.decision in (DecisionState.MATH_DISCREPANCY, DecisionState.DETERMINISTIC_EXCEPTION):
             settlement = next(
                 (s for s in settlements if s["settlement_id"] == result.settlement_id),
                 None,
@@ -401,6 +458,38 @@ def run_engine(
                     bank_credit = lr.bank_credit if lr else None
 
                     methods = list(set(PaymentMethod(p["method"]) for p in linked_payments if "method" in p))
+
+                    # Determine fee/tax validation status based on which checks failed
+                    fee_failed = "fee_validation" in result.deterministic_checks_failed
+                    tax_failed = "tax_validation" in result.deterministic_checks_failed
+
+                    # Build payment-level breakdowns (data the aggregate engine discards)
+                    payment_details = []
+                    for p in linked_payments:
+                        method = PaymentMethod(p["method"])
+                        fee_exp = compute_fee(method, p["amount"])
+                        tax_exp = compute_tax(p["fee"])
+                        payment_details.append(PaymentDetail(
+                            payment_id=p["payment_id"],
+                            amount_paise=p["amount"],
+                            method=method,
+                            fee_paise=p.get("fee", 0),
+                            tax_paise=p.get("tax", 0),
+                            fee_expected_paise=fee_exp,
+                            tax_expected_paise=tax_exp,
+                            fee_mismatch=(p.get("fee", 0) != fee_exp),
+                            tax_mismatch=(p.get("tax", 0) != tax_exp),
+                        ))
+
+                    # Cross-settlement context (patterns across the batch)
+                    cross_ctx = CrossSettlementContext(
+                        batch_size=total_results,
+                        batch_fee_exception_rate=batch_fee_exception_rate,
+                        batch_refund_rate=batch_refund_rate,
+                        batch_math_discrepancy_rate=batch_math_disc_rate,
+                        merchant_fee_exceptions_in_batch=fee_exception_count,
+                        method_mix=method_counter,
+                    )
 
                     evidence = EvidencePacket(
                         settlement_id=result.settlement_id,
@@ -419,12 +508,12 @@ def run_engine(
                         fees_summary=FeesSummary(
                             total_paise=sum(p.get("fee", 0) for p in linked_payments),
                             structure_applied="deterministic",
-                            validation_result=ValidationResult.PASSED,
+                            validation_result=ValidationResult.FAILED if fee_failed else ValidationResult.PASSED,
                         ),
                         tax_summary=TaxSummary(
                             total_paise=sum(p.get("tax", 0) for p in linked_payments),
                             derivation_rule="floor(fee * 0.18)",
-                            validation_result=ValidationResult.PASSED,
+                            validation_result=ValidationResult.FAILED if tax_failed else ValidationResult.PASSED,
                         ),
                         bank_credit=BankCreditEvidence(
                             utr=bank_credit.get("utr", "") if bank_credit else "",
@@ -434,18 +523,21 @@ def run_engine(
                         timing=TimingEvidence(
                             settlement_created_at=datetime.fromisoformat(settlement["created_at"]) if isinstance(settlement.get("created_at"), str) else datetime.now(),
                             settled_at=datetime.fromisoformat(settlement["settled_at"]) if isinstance(settlement.get("settled_at"), str) else datetime.now(),
-                            bank_credited_at=datetime.now(),
+                            bank_credited_at=datetime.combine(bank_credit["date"], datetime.min.time()) if bank_credit and "date" in bank_credit else datetime.now(),
                             expected_cycle_days=2,
                         ),
                         deterministic_checks_passed=result.deterministic_checks_passed,
                         deterministic_checks_failed=result.deterministic_checks_failed,
+                        payment_details=payment_details,
+                        cross_settlement=cross_ctx,
                     )
 
-                    ai_result = investigate(evidence, llm_client=llm_client)
+                    ai_result = investigate(evidence, llm_client=effective_llm_client)
                     if ai_result.ai_response is not None:
                         result.ai_response = ai_result.ai_response
                         result.decision = ai_result.decision
                         result.escalate_to_human = True
+                        result.ai_mode = "demo" if ai_result.is_mock else "live"
                     else:
                         # LLM failed → UNRESOLVED, keep deterministic result otherwise
                         result.decision = DecisionState.UNRESOLVED

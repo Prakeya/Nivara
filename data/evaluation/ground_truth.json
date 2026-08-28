@@ -245,15 +245,15 @@
     "difference_paise": 84707
   },
   {
-    "settlement_id": "SETL_0035",
-    "label": "duplicate_settlement",
-    "expected_amount_paise": 1001926,
-    "actual_amount_paise": 1001926,
+    "settlement_id": "SETL_0036",
+    "label": "bank_mismatch",
+    "expected_amount_paise": 926542,
+    "actual_amount_paise": 926542,
     "difference_paise": 0
   },
   {
-    "settlement_id": "SETL_0009",
-    "label": "duplicate_settlement",
+    "settlement_id": "SETL_0037",
+    "label": "bank_mismatch",
     "expected_amount_paise": 450565,
     "actual_amount_paise": 450565,
     "difference_paise": 0
@@ -261,43 +261,45 @@
   {
     "settlement_id": "SETL_0038",
     "label": "bank_mismatch",
-    "expected_amount_paise": 901936,
-    "actual_amount_paise": 901936,
+    "expected_amount_paise": 639172,
+    "actual_amount_paise": 639172,
     "difference_paise": 0
   },
   {
     "settlement_id": "SETL_0039",
     "label": "bank_mismatch",
-    "expected_amount_paise": 50517,
-    "actual_amount_paise": 50517,
+    "expected_amount_paise": 373402,
+    "actual_amount_paise": 373402,
     "difference_paise": 0
   },
   {
     "settlement_id": "SETL_0040",
     "label": "bank_mismatch",
-    "expected_amount_paise": 654461,
-    "actual_amount_paise": 654461,
+    "expected_amount_paise": 374850,
+    "actual_amount_paise": 374850,
     "difference_paise": 0
   },
   {
     "settlement_id": "SETL_0041",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 624326,
-    "actual_amount_paise": 624326,
-    "difference_paise": 0
+    "label": "fee_mismatch",
+    "expected_amount_paise": 1088382,
+    "actual_amount_paise": 1088388,
+    "difference_paise": 6,
+    "mismatched_payment_id": "PAY_0041_00"
   },
   {
     "settlement_id": "SETL_0042",
-    "label": "bank_mismatch",
-    "expected_amount_paise": 556853,
-    "actual_amount_paise": 556853,
-    "difference_paise": 0
+    "label": "fee_mismatch",
+    "expected_amount_paise": 649834,
+    "actual_amount_paise": 649886,
+    "difference_paise": 52,
+    "mismatched_payment_id": "PAY_0042_00"
   },
   {
     "settlement_id": "SETL_0043",
     "label": "fee_mismatch",
-    "expected_amount_paise": 1597018,
-    "actual_amount_paise": 1597033,
+    "expected_amount_paise": 560957,
+    "actual_amount_paise": 560972,
     "difference_paise": 15,
     "mismatched_payment_id": "PAY_0043_00"
   },
@@ -319,18 +321,18 @@
   },
   {
     "settlement_id": "SETL_0046",
-    "label": "fee_mismatch",
+    "label": "tax_inconsistency",
     "expected_amount_paise": 867965,
-    "actual_amount_paise": 867963,
-    "difference_paise": -2,
+    "actual_amount_paise": 867964,
+    "difference_paise": -1,
     "mismatched_payment_id": "PAY_0046_00"
   },
   {
     "settlement_id": "SETL_0047",
-    "label": "fee_mismatch",
+    "label": "tax_inconsistency",
     "expected_amount_paise": 918747,
-    "actual_amount_paise": 918704,
-    "difference_paise": -43,
+    "actual_amount_paise": 918728,
+    "difference_paise": -19,
     "mismatched_payment_id": "PAY_0047_00"
   },
   {
@@ -343,88 +345,226 @@
   },
   {
     "settlement_id": "SETL_0049",
-    "label": "tax_inconsistency",
-    "expected_amount_paise": 996296,
-    "actual_amount_paise": 996286,
-    "difference_paise": -10,
-    "mismatched_payment_id": "PAY_0049_00"
+    "label": "refund_timing",
+    "expected_amount_paise": 507379,
+    "actual_amount_paise": 507482,
+    "difference_paise": 103
   },
   {
     "settlement_id": "SETL_0050",
-    "label": "tax_inconsistency",
-    "expected_amount_paise": 1377986,
-    "actual_amount_paise": 1377996,
-    "difference_paise": 10,
-    "mismatched_payment_id": "PAY_0050_00"
+    "label": "refund_timing",
+    "expected_amount_paise": 710818,
+    "actual_amount_paise": 707973,
+    "difference_paise": -2845
   },
   {
     "settlement_id": "SETL_0051",
     "label": "refund_timing",
-    "expected_amount_paise": 381799,
-    "actual_amount_paise": 381499,
-    "difference_paise": -300
+    "expected_amount_paise": 427519,
+    "actual_amount_paise": 429211,
+    "difference_paise": 1692
   },
   {
     "settlement_id": "SETL_0052",
     "label": "refund_timing",
-    "expected_amount_paise": 362916,
-    "actual_amount_paise": 364456,
-    "difference_paise": 1540
+    "expected_amount_paise": 113733,
+    "actual_amount_paise": 114827,
+    "difference_paise": 1094
   },
   {
     "settlement_id": "SETL_0053",
     "label": "refund_timing",
-    "expected_amount_paise": 328482,
-    "actual_amount_paise": 332470,
-    "difference_paise": 3988
+    "expected_amount_paise": 769270,
+    "actual_amount_paise": 771329,
+    "difference_paise": 2059
   },
   {
     "settlement_id": "SETL_0054",
-    "label": "refund_timing",
-    "expected_amount_paise": 481587,
-    "actual_amount_paise": 477063,
-    "difference_paise": -4524
+    "label": "adjustment_entry",
+    "expected_amount_paise": 504941,
+    "actual_amount_paise": 506242,
+    "difference_paise": 1301
   },
   {
     "settlement_id": "SETL_0055",
-    "label": "refund_timing",
-    "expected_amount_paise": 335688,
-    "actual_amount_paise": 330804,
-    "difference_paise": -4884
+    "label": "adjustment_entry",
+    "expected_amount_paise": 587552,
+    "actual_amount_paise": 585808,
+    "difference_paise": -1744
   },
   {
     "settlement_id": "SETL_0056",
-    "label": "unexplained",
-    "expected_amount_paise": 827827,
-    "actual_amount_paise": 818380,
-    "difference_paise": -9447
+    "label": "adjustment_entry",
+    "expected_amount_paise": 790296,
+    "actual_amount_paise": 793540,
+    "difference_paise": 3244
   },
   {
     "settlement_id": "SETL_0057",
-    "label": "unexplained",
-    "expected_amount_paise": 915943,
-    "actual_amount_paise": 919147,
-    "difference_paise": 3204
+    "label": "adjustment_entry",
+    "expected_amount_paise": 577785,
+    "actual_amount_paise": 580588,
+    "difference_paise": 2803
   },
   {
     "settlement_id": "SETL_0058",
-    "label": "unexplained",
-    "expected_amount_paise": 649524,
-    "actual_amount_paise": 642002,
-    "difference_paise": -7522
+    "label": "adjustment_entry",
+    "expected_amount_paise": 848435,
+    "actual_amount_paise": 853333,
+    "difference_paise": 4898
   },
   {
     "settlement_id": "SETL_0059",
-    "label": "unexplained",
-    "expected_amount_paise": 338935,
-    "actual_amount_paise": 344964,
-    "difference_paise": 6029
+    "label": "refund_after_settlement",
+    "expected_amount_paise": 359994,
+    "actual_amount_paise": 359994,
+    "difference_paise": 0
   },
   {
     "settlement_id": "SETL_0060",
+    "label": "refund_after_settlement",
+    "expected_amount_paise": 715283,
+    "actual_amount_paise": 715283,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0061",
+    "label": "refund_after_settlement",
+    "expected_amount_paise": 66292,
+    "actual_amount_paise": 66292,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0062",
+    "label": "refund_after_settlement",
+    "expected_amount_paise": 472431,
+    "actual_amount_paise": 472431,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0063",
+    "label": "refund_after_settlement",
+    "expected_amount_paise": 391724,
+    "actual_amount_paise": 391724,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0064",
+    "label": "timing_race",
+    "expected_amount_paise": 256719,
+    "actual_amount_paise": 256719,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0065",
+    "label": "timing_race",
+    "expected_amount_paise": 355623,
+    "actual_amount_paise": 355623,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0066",
+    "label": "timing_race",
+    "expected_amount_paise": 477967,
+    "actual_amount_paise": 477967,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0067",
+    "label": "timing_race",
+    "expected_amount_paise": 347651,
+    "actual_amount_paise": 347651,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0068",
+    "label": "timing_race",
+    "expected_amount_paise": 434690,
+    "actual_amount_paise": 434690,
+    "difference_paise": 0
+  },
+  {
+    "settlement_id": "SETL_0069",
+    "label": "partial_settlement",
+    "expected_amount_paise": 394434,
+    "actual_amount_paise": 271800,
+    "difference_paise": -122634
+  },
+  {
+    "settlement_id": "SETL_0070",
+    "label": "partial_settlement",
+    "expected_amount_paise": 1017921,
+    "actual_amount_paise": 637400,
+    "difference_paise": -380521
+  },
+  {
+    "settlement_id": "SETL_0071",
+    "label": "partial_settlement",
+    "expected_amount_paise": 1124605,
+    "actual_amount_paise": 936800,
+    "difference_paise": -187805
+  },
+  {
+    "settlement_id": "SETL_0072",
+    "label": "partial_settlement",
+    "expected_amount_paise": 703669,
+    "actual_amount_paise": 507500,
+    "difference_paise": -196169
+  },
+  {
+    "settlement_id": "SETL_0073",
     "label": "unexplained",
-    "expected_amount_paise": 622078,
-    "actual_amount_paise": 620454,
-    "difference_paise": -1624
+    "expected_amount_paise": 1057731,
+    "actual_amount_paise": 1054211,
+    "difference_paise": -3520
+  },
+  {
+    "settlement_id": "SETL_0074",
+    "label": "unexplained",
+    "expected_amount_paise": 788841,
+    "actual_amount_paise": 787463,
+    "difference_paise": -1378
+  },
+  {
+    "settlement_id": "SETL_0075",
+    "label": "unexplained",
+    "expected_amount_paise": 785055,
+    "actual_amount_paise": 794116,
+    "difference_paise": 9061
+  },
+  {
+    "settlement_id": "SETL_0076",
+    "label": "unexplained",
+    "expected_amount_paise": 1054787,
+    "actual_amount_paise": 1050883,
+    "difference_paise": -3904
+  },
+  {
+    "settlement_id": "SETL_0077",
+    "label": "unexplained",
+    "expected_amount_paise": 265113,
+    "actual_amount_paise": 272306,
+    "difference_paise": 7193
+  },
+  {
+    "settlement_id": "SETL_0078",
+    "label": "unexplained",
+    "expected_amount_paise": 765759,
+    "actual_amount_paise": 770083,
+    "difference_paise": 4324
+  },
+  {
+    "settlement_id": "SETL_0079",
+    "label": "unexplained",
+    "expected_amount_paise": 1452525,
+    "actual_amount_paise": 1451048,
+    "difference_paise": -1477
+  },
+  {
+    "settlement_id": "SETL_0080",
+    "label": "unexplained",
+    "expected_amount_paise": 1370958,
+    "actual_amount_paise": 1380305,
+    "difference_paise": 9347
   }
 ]

@@ -193,6 +193,33 @@ class BankCredit(BaseModel):
     bank_account: Optional[str] = None
 
 
+class PaymentDetail(BaseModel):
+    """Individual payment-level record for AI investigation context."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    payment_id: str
+    amount_paise: int = Field(ge=0)
+    method: PaymentMethod
+    fee_paise: int = Field(ge=0)
+    tax_paise: int = Field(ge=0)
+    fee_expected_paise: int = Field(ge=0)
+    tax_expected_paise: int = Field(ge=0)
+    fee_mismatch: bool = False
+    tax_mismatch: bool = False
+
+
+class CrossSettlementContext(BaseModel):
+    """Cross-settlement patterns the deterministic engine cannot see."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    batch_size: int = Field(ge=0)
+    batch_fee_exception_rate: float = Field(ge=0.0, le=1.0)
+    batch_refund_rate: float = Field(ge=0.0, le=1.0)
+    batch_math_discrepancy_rate: float = Field(ge=0.0, le=1.0)
+    merchant_fee_exceptions_in_batch: int = Field(ge=0)
+    method_mix: dict = Field(default_factory=dict)
+
+
 class EvidencePacket(BaseModel):
     model_config = ConfigDict(
         strict=True,
@@ -213,6 +240,8 @@ class EvidencePacket(BaseModel):
     timing: TimingEvidence
     deterministic_checks_passed: list[str]
     deterministic_checks_failed: list[str]
+    payment_details: list[PaymentDetail] = Field(default_factory=list)
+    cross_settlement: Optional[CrossSettlementContext] = None
 
     @model_validator(mode="after")
     def validate_no_pii(self) -> "EvidencePacket":
@@ -262,6 +291,7 @@ class ReconciliationResult(BaseModel):
     deterministic_checks_passed: list[str]
     deterministic_checks_failed: list[str]
     escalate_to_human: bool
+    ai_mode: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_difference_consistency(self) -> "ReconciliationResult":
