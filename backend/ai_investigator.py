@@ -452,6 +452,15 @@ class MockLLMClient:
 _DEMO_PREFIX = "[DEMO] "
 
 
+def _compute_confidence(failed_checks: list[str], total_checks: int = 12) -> float:
+    """Confidence = proportion of checks that passed.
+    More checks passed = higher confidence in classification."""
+    if not failed_checks:
+        return 0.4  # MATH_DISCREPANCY — low confidence, no failed check to anchor on
+    passed = total_checks - len(failed_checks)
+    return round(0.5 + (passed / total_checks) * 0.4, 2)  # Range: 0.50 - 0.90
+
+
 def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, list[str]]:
     """Heuristic classifier for demo without API key.
 
@@ -487,7 +496,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Check merchant's contracted fee rates; verify if a fee waiver or "
                     f"promotional rate was applied inconsistently across payment methods."
                 ),
-                0.75,
+                _compute_confidence(failed_checks),
                 ["fees_summary", "tax_summary", "linked_payments_summary"],
             )
 
@@ -511,7 +520,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                         f"Batch context: {batch_rate*100:.0f}% of settlements in this batch have fee exceptions. "
                         f"Remediation: Verify if merchant is on a different fee tier; check for manual fee overrides."
                     ),
-                    0.70,
+                    _compute_confidence(failed_checks),
                     ["fees_summary", "linked_payments_summary"],
                 )
             if undercharged and not overcharged:
@@ -527,7 +536,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                         f"This may indicate a promotional fee waiver or rate card discrepancy. "
                         f"Remediation: Check if a fee waiver was applied; verify the merchant's contracted rate."
                     ),
-                    0.70,
+                    _compute_confidence(failed_checks),
                     ["fees_summary", "linked_payments_summary"],
                 )
             # Mixed over/under
@@ -541,7 +550,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Pull the merchant's fee contract; cross-reference each payment method's "
                     f"applicable rate against what was charged."
                 ),
-                0.65,
+                _compute_confidence(failed_checks),
                 ["fees_summary", "linked_payments_summary"],
             )
 
@@ -565,7 +574,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                         f"Remediation: Check if GST rate changed mid-period; verify rounding method; "
                         f"confirm tax-exclusive vs tax-inclusive handling."
                     ),
-                    0.75,
+                    _compute_confidence(failed_checks),
                     ["tax_summary", "linked_payments_summary"],
                 )
             return (
@@ -575,7 +584,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"but no individual payment-level mismatch found. "
                     f"Remediation: Check aggregate tax calculation across all linked payments."
                 ),
-                0.55,
+                _compute_confidence(failed_checks),
                 ["tax_summary"],
             )
 
@@ -592,7 +601,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Check if credit is pending T+1/T+2; verify UTR mapping; "
                     f"contact bank with settlement reference."
                 ),
-                0.70,
+                _compute_confidence(failed_checks),
                 ["bank_credit", "timing"],
             )
 
@@ -608,7 +617,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Check if UTR belongs to a different batch; "
                     f"cross-reference with bank's NEFT/RTGS reference directory."
                 ),
-                0.80,
+                _compute_confidence(failed_checks),
                 ["bank_credit", "timing"],
             )
 
@@ -622,7 +631,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Identify original vs duplicate; check for retry or "
                     f"idempotency failure; remove or mark the duplicate."
                 ),
-                0.85,
+                _compute_confidence(failed_checks),
                 ["linked_payments_summary", "linked_refunds_summary"],
             )
 
@@ -636,7 +645,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Check if the transaction was deleted or belongs to a "
                     f"different merchant account."
                 ),
-                0.80,
+                _compute_confidence(failed_checks),
                 ["linked_payments_summary"],
             )
 
@@ -650,7 +659,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"its parent payment. "
                     f"Remediation: Trace each payment ID to its correct settlement."
                 ),
-                0.75,
+                _compute_confidence(failed_checks),
                 ["linked_payments_summary", "linked_refunds_summary"],
             )
 
@@ -665,7 +674,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                     f"Remediation: Verify adjustment amount matches documented reason; "
                     f"cross-check with adjustment approval record."
                 ),
-                0.70,
+                _compute_confidence(failed_checks),
                 ["linked_payments_summary"],
             )
 
@@ -677,7 +686,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                 f"{_DEMO_PREFIX}Deterministic check '{check}' failed for {evidence.settlement_id}. "
                 f"Remediation: Review the specific failed check against source records."
             ),
-            0.50,
+            _compute_confidence(failed_checks),
             [],
         )
 
@@ -693,7 +702,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                 f"is likely caused by refund timing within the settlement window. "
                 f"Remediation: Verify refund processing dates against settlement cutoff."
             ),
-            0.65,
+            _compute_confidence(failed_checks),
             ["linked_refunds_summary", "timing"],
         )
 
@@ -712,7 +721,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
                 f"difference may result from bank-side processing delay. "
                 f"Remediation: Contact bank to confirm credit processing status."
             ),
-            0.60,
+            _compute_confidence(failed_checks),
             ["timing", "bank_credit"],
         )
 
@@ -724,7 +733,7 @@ def _classify_by_heuristic(evidence: EvidencePacket) -> tuple[str, str, float, l
             f"but no clear timing or refund cause was found. "
             f"Remediation: Manually review the settlement breakdown."
         ),
-        0.40,
+        _compute_confidence(failed_checks),
         ["timing"],
     )
 
