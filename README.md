@@ -99,6 +99,7 @@ It validates:
 * Amount consistency
 * Expected settlement amount
 * Settlement difference
+* Adjustment consistency (declared adjustments must bridge the gap)
 
 The LLM is **not involved** in these calculations.
 
@@ -347,7 +348,8 @@ Nivara/
 │   ├── evaluation.py
 │   ├── ai_investigator.py
 │   ├── batch_analyzer.py
-│   └── audit.py
+│   ├── audit.py
+│   └── mcp_client.py
 │
 ├── frontend/
 │   ├── index.html
@@ -360,6 +362,7 @@ Nivara/
 │       └── BatchPatterns.jsx
 │
 ├── tests/
+│   ├── conftest.py
 │   ├── test_models.py
 │   ├── test_ingestion.py
 │   ├── test_linking.py
@@ -370,6 +373,8 @@ Nivara/
 │   ├── test_batch_analyzer.py
 │   ├── test_audit.py
 │   ├── test_api.py
+│   ├── test_frontend.py
+│   ├── test_mcp_client.py
 │   └── test_e2e.py
 │
 ├── data/
@@ -400,10 +405,10 @@ pip install -r requirements.txt
 
 # Generate Synthetic Evaluation Data
 
-Generate a 60-settlement evaluation dataset:
+Generate an 80-settlement evaluation dataset:
 
 ```bash
-python backend/generator.py --output data/evaluation/ --count 60
+python backend/generator.py --output data/evaluation/ --count 80
 ```
 
 This creates:
@@ -462,21 +467,56 @@ The test suite covers:
 
 # Evaluation Dataset
 
-The synthetic evaluation dataset contains 60 labeled settlements:
+The synthetic evaluation dataset contains **80 labeled settlements** across 11 edge-case categories:
 
-| Ground Truth         |  Count |
-| -------------------- | -----: |
-| Clean Match          |     30 |
-| Missing Reference    |      5 |
-| Duplicate Settlement |      2 |
-| Bank Mismatch        |      5 |
-| Fee Mismatch         |      5 |
-| Tax Inconsistency    |      3 |
-| Refund Timing        |      5 |
-| Unexplained          |      5 |
-| **Total**            | **60** |
+| Ground Truth             | Count | Engine Behavior                                       |
+| ------------------------ | ----- | ----------------------------------------------------- |
+| Clean Match              |    30 | Correctly identified as clean                         |
+| Missing Reference        |     5 | Caught — DET-EXCEPTION (reference_existence)          |
+| Bank Mismatch            |     5 | Caught — DET-EXCEPTION (bank_credit_existence)        |
+| Fee Mismatch             |     5 | Caught — DET-EXCEPTION (fee_validation)               |
+| Tax Inconsistency        |     3 | Caught — DET-EXCEPTION (tax_validation)               |
+| Refund Timing            |     5 | Caught — MATH_DISCREPANCY (detected by AI layer)      |
+| Adjustment Entry         |     5 | Caught — MATH_DISCREPANCY (amount differs from expected) |
+| Partial Settlement       |     4 | Caught — DET-EXCEPTION (amount_cross_check)           |
+| Refund After Settlement  |     5 | **Missed** — engine blind spot (CLEAN_MATCH)          |
+| Timing Race              |     5 | **Missed** — engine blind spot (CLEAN_MATCH)          |
+| Unexplained              |     8 | Caught — MATH_DISCREPANCY (all checks pass, diff≠0)   |
+| **Total**                | **80** |                                                      |
 
-The ground-truth dataset allows the complete pipeline to be evaluated against known outcomes rather than relying on a manually selected demonstration case.
+**11 edge-case categories** include 4 that the engine cannot catch (refund_after_settlement, timing_race) — these are deliberate blind spots that expose where the deterministic engine needs AI or additional checks.
+
+---
+
+# Evaluation Methodology & Limitations
+
+## How We Evaluate
+
+Nivara uses a **confusion matrix** approach against known ground-truth labels:
+
+* **True Positive (TP):** clean_match ground truth → CLEAN_MATCH decision
+* **True Negative (TN):** exception ground truth → exception decision (any non-clean)
+* **False Positive (FP):** clean_match ground truth → exception decision (over-escalated)
+* **False Negative (FN):** exception ground truth → CLEAN_MATCH decision (missed!)
+
+**Match Rate** = (TP + TN) / Total
+**False Accept Rate** = FN / Total
+**Per-class Precision/Recall/F1** is reported for every label category.
+
+## Honest Limitations
+
+**The dataset is synthetic and co-designed with the engine.** The generator produces edge cases that map to the engine's 11 deterministic checks. A 100% match rate on this dataset would mean the engine catches every case it was built to catch — which is expected, not impressive.
+
+**The match rate is deliberately NOT 100%.** We included two categories of engine blind spots:
+
+* **refund_after_settlement:** A refund processed after settlement is not in `linked_refund_ids`. The engine computes expected = payments - refunds - fees - tax, finds difference == 0, and returns CLEAN_MATCH. But the merchant was overpaid.
+* **timing_race:** A refund created during the settlement processing window is not linked. Same outcome — engine says clean, but the refund should have been deducted.
+
+These false negatives are **honest** — they show where the deterministic engine needs AI investigation or additional checks.
+
+**What a real-world dataset would include:** partial settlements across multiple payouts, multi-currency transactions, adjustments and chargebacks, ambiguous timing edge cases, and records from multiple merchants with overlapping payment IDs. Our synthetic data does not capture this complexity.
+
+**Throughput is measured, not estimated.** The evaluation pipeline instruments wall-clock time and reports settlements/second.
 
 ---
 
@@ -484,12 +524,13 @@ The ground-truth dataset allows the complete pipeline to be evaluated against kn
 
 Nivara evaluates the reconciliation pipeline using:
 
-* Match rate
-* False accept rate
-* Safe escalation rate
-* AI invocation rate
-* AI auto-approval rate
-* Processing time per settlement
+* **Match rate** (confusion-matrix based, not self-reported)
+* **False accept rate** (exceptions missed as clean)
+* **Per-class precision / recall / F1** (for every label category)
+* **Macro-averaged F1** (single-number summary across all classes)
+* **Escalation breakdown** (deterministic exceptions vs unresolved vs AI-reviewed)
+* **Throughput** (settlements/second, instrumented)
+* **AI auto-approval rate** (= 0% by design, enforced by schema)
 
 The key safety metric is:
 
@@ -497,7 +538,7 @@ The key safety metric is:
 AI Auto-Approval Rate = 0%
 ```
 
-This is intentional and enforced by design.
+This is intentional and enforced by Pydantic schema (`AIResponse.recommended_action` is `Literal[ESCALATE_TO_HUMAN]`).
 
 ---
 
@@ -600,7 +641,8 @@ The following capabilities are outside the current MVP scope:
 * **Multi-currency reconciliation** — currently focused on INR/paise.
 * **Advanced chart visualizations** — tabular reconciliation views are sufficient for the MVP.
 * **LLM fine-tuning** — AI behavior uses structured prompting and validation.
-* **Microservices, Docker, and Kubernetes** — the implementation intentionally uses a lightweight architecture suitable for the buildathon and demonstration environment.
+* **Persistent job queue** — in-memory job store for demonstration; production would need Redis/SQS.
+* **Multi-tenant support** — single-tenant design for hackathon scope.
 
 These are deliberate scope decisions rather than accidental omissions.
 
