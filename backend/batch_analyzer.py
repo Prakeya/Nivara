@@ -50,19 +50,18 @@ class DetectedPattern:
 
 def _detect_fee_rounding(
     results: list[ReconciliationResult],
-    ground_truth: list[dict[str, Any]],
+    ground_truth: list[dict[str, Any]] | None = None,
 ) -> list[DetectedPattern]:
     """
     SYSTEMATIC_FEE_ROUNDING: same fee discrepancy across multiple settlements.
-    Looks for multiple FEE_MISMATCH settlements with the same difference_paise.
+    Detects MATH_DISCREPANCY results where fee validation passed but there is
+    a consistent difference (indicating systematic rounding).
     """
-    gt_by_sid = {gt["settlement_id"]: gt for gt in ground_truth}
-
-    # Group fee mismatches by their difference
     fee_diff_groups: dict[int, list[str]] = {}
     for r in results:
-        gt = gt_by_sid.get(r.settlement_id)
-        if gt and gt.get("label") == "fee_mismatch":
+        if (r.decision == DecisionState.MATH_DISCREPANCY
+                and "fee_validation" in r.deterministic_checks_passed
+                and r.difference_paise != 0):
             diff = r.difference_paise
             if diff not in fee_diff_groups:
                 fee_diff_groups[diff] = []
@@ -78,7 +77,7 @@ def _detect_fee_rounding(
                 confidence=confidence,
                 recommended_action="Review fee rounding rule for consistency",
                 description=(
-                    f"{len(sids)} settlements have identical fee discrepancy of "
+                    f"{len(sids)} settlements have identical discrepancy of "
                     f"{diff} paise. Suggests systematic fee rounding issue."
                 ),
             ))
@@ -138,76 +137,64 @@ def _detect_bank_delay(
 
 def _detect_refund_cluster(
     results: list[ReconciliationResult],
-    ground_truth: list[dict[str, Any]],
-    settlements: list[dict[str, Any]],
+    ground_truth: list[dict[str, Any]] | None = None,
+    settlements: list[dict[str, Any]] | None = None,
 ) -> list[DetectedPattern]:
     """
-    REFUND_CLUSTER: multiple refund timing issues on same date.
-    Looks for multiple REFUND_TIMING settlements created on the same date.
+    REFUND_CLUSTER: multiple settlements with refund-related failures.
+    Detects DETERMINISTIC_EXCEPTION results where refund_overage or
+    refund-related checks failed.
     """
-    gt_by_sid = {gt["settlement_id"]: gt for gt in ground_truth}
+    if settlements is None:
+        settlements = []
     settlement_by_sid = {s["settlement_id"]: s for s in settlements}
 
-    # Group refund timing issues by date
-    date_groups: dict[str, list[str]] = {}
+    refund_failures: list[str] = []
     for r in results:
-        gt = gt_by_sid.get(r.settlement_id)
-        if gt and gt.get("label") == "refund_timing":
-            s = settlement_by_sid.get(r.settlement_id)
-            if s:
-                # Use created_at date (first 10 chars of YYYY-MM-DD)
-                created = s.get("created_at", "")[:10]
-                if created not in date_groups:
-                    date_groups[created] = []
-                date_groups[created].append(r.settlement_id)
+        if (r.decision == DecisionState.DETERMINISTIC_EXCEPTION
+                and any("refund" in fc.lower() for fc in r.deterministic_checks_failed)):
+            refund_failures.append(r.settlement_id)
 
-    patterns = []
-    for date, sids in date_groups.items():
-        if len(sids) >= 2:
-            confidence = min(1.0, len(sids) / 3.0)
-            patterns.append(DetectedPattern(
-                pattern_type=PatternType.REFUND_CLUSTER,
-                affected_settlement_ids=sids,
-                confidence=confidence,
-                recommended_action="Review refund processing timing on " + date,
-                description=(
-                    f"{len(sids)} refund timing issues on {date}. "
-                    f"May indicate batch refund processing delay."
-                ),
-            ))
+    if len(refund_failures) < 2:
+        return []
 
-    return patterns
+    confidence = min(1.0, len(refund_failures) / 3.0)
+    return [DetectedPattern(
+        pattern_type=PatternType.REFUND_CLUSTER,
+        affected_settlement_ids=refund_failures,
+        confidence=confidence,
+        recommended_action="Review refund processing for affected settlements",
+        description=(
+            f"{len(refund_failures)} settlements have refund-related failures. "
+            f"May indicate batch refund processing issues."
+        ),
+    )]
 
 
 def _detect_unexplained_gaps(
     results: list[ReconciliationResult],
-    ground_truth: list[dict[str, Any]],
+    ground_truth: list[dict[str, Any]] | None = None,
 ) -> list[DetectedPattern]:
     """
-    REPEATED_UNEXPLAINED_GAP: multiple unexplained gaps with similar amounts.
-    Looks for multiple UNEXPLAINED results with similar difference_paise.
+    REPEATED_UNEXPLAINED_GAP: multiple MATH_DISCREPANCY results with similar
+    difference amounts.
     """
-    gt_by_sid = {gt["settlement_id"]: gt for gt in ground_truth}
-
-    # Group unexplained by approximate difference (within 10%)
-    unexplained: list[tuple[str, int]] = []
+    gaps: list[tuple[str, int]] = []
     for r in results:
-        gt = gt_by_sid.get(r.settlement_id)
-        if gt and gt.get("label") == "unexplained":
-            unexplained.append((r.settlement_id, r.difference_paise))
+        if r.decision == DecisionState.MATH_DISCREPANCY and r.difference_paise != 0:
+            gaps.append((r.settlement_id, r.difference_paise))
 
-    if len(unexplained) < 2:
+    if len(gaps) < 2:
         return []
 
-    # Cluster by similarity (within 10% of each other)
     patterns = []
     used: set[str] = set()
-    for i, (sid1, diff1) in enumerate(unexplained):
+    for i, (sid1, diff1) in enumerate(gaps):
         if sid1 in used:
             continue
         cluster_sids = [sid1]
         cluster_diffs = [diff1]
-        for j, (sid2, diff2) in enumerate(unexplained):
+        for j, (sid2, diff2) in enumerate(gaps):
             if i != j and sid2 not in used:
                 if diff1 != 0 and abs(diff1 - diff2) / abs(diff1) <= 0.1:
                     cluster_sids.append(sid2)
@@ -223,7 +210,7 @@ def _detect_unexplained_gaps(
                 confidence=confidence,
                 recommended_action="Investigate common cause for similar gaps",
                 description=(
-                    f"{len(cluster_sids)} settlements have unexplained gaps "
+                    f"{len(cluster_sids)} settlements have gaps "
                     f"of ~{avg_diff} paise. May share a common cause."
                 ),
             ))
@@ -243,24 +230,26 @@ def analyze_batch(
     """
     Analyze a batch of reconciliation results for cross-settlement patterns.
 
+    Detects patterns from deterministic engine outcomes only. ground_truth
+    and settlements are accepted for backward compatibility but are not
+    used for pattern detection (production safety invariant).
+
     Args:
         results: Engine reconciliation results, one per settlement.
-        ground_truth: Optional ground-truth labels for pattern classification.
+        ground_truth: Ignored. Accepted for API compatibility.
         settlements: Optional settlement dicts for date-based analysis.
 
     Returns:
         List of detected patterns, sorted by confidence descending.
     """
-    if ground_truth is None:
-        ground_truth = []
     if settlements is None:
         settlements = []
 
     patterns: list[DetectedPattern] = []
-    patterns.extend(_detect_fee_rounding(results, ground_truth))
+    patterns.extend(_detect_fee_rounding(results))
     patterns.extend(_detect_bank_delay(results, settlements))
-    patterns.extend(_detect_refund_cluster(results, ground_truth, settlements))
-    patterns.extend(_detect_unexplained_gaps(results, ground_truth))
+    patterns.extend(_detect_refund_cluster(results, settlements=settlements))
+    patterns.extend(_detect_unexplained_gaps(results))
 
     # Sort by confidence descending
     patterns.sort(key=lambda p: p.confidence, reverse=True)

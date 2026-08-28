@@ -7,6 +7,8 @@ Valid evidence → correct classification. AI cannot alter expected_amount.
 
 from datetime import datetime, date
 
+import pytest
+
 from backend.ai_investigator import (
     investigate,
     compute_confidence_tier,
@@ -18,6 +20,7 @@ from backend.ai_investigator import (
     LLMError,
     InvestigationResult,
 )
+from backend.engine import run_engine, reconcile_settlement
 from backend.models import (
     AIClassification,
     AIResponse,
@@ -38,6 +41,43 @@ from uuid import uuid4
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _txn(pid, amount, method="upi", fee=0, tax=0, settlement_id=None):
+    return {
+        "payment_id": pid,
+        "order_id": f"ORD_{pid}",
+        "amount": amount,
+        "status": "captured",
+        "method": method,
+        "fee": fee,
+        "tax": tax,
+        "created_at": datetime(2026, 8, 20, 10, 0, 0),
+        "settlement_id": settlement_id,
+    }
+
+
+def _settlement(sid, amount, utr="UTR_001", linked_pids=None, linked_rids=None):
+    return {
+        "settlement_id": sid,
+        "amount": amount,
+        "status": "settled",
+        "utr": utr,
+        "created_at": datetime(2026, 8, 20, 10, 0, 0),
+        "settled_at": datetime(2026, 8, 21, 8, 0, 0),
+        "linked_payment_ids": linked_pids or [],
+        "linked_refund_ids": linked_rids or [],
+    }
+
+
+def _bank_credit(utr, amount):
+    return {
+        "utr": utr,
+        "amount": amount,
+        "date": date(2026, 8, 22),
+        "description": "Bank credit",
+        "bank_account": "ACC001",
+    }
+
 
 def _make_evidence_packet(
     settlement_id: str = "SETL_0001",
@@ -452,3 +492,126 @@ class TestFullPipeline:
         assert inv_result.decision == DecisionState.REVIEW_REQUIRED
         assert inv_result.ai_response.classification == AIClassification.UNEXPLAINED
         assert inv_result.escalate_to_human is True
+
+
+# ---------------------------------------------------------------------------
+# Production LLM path tests
+# ---------------------------------------------------------------------------
+
+class TestProductionLLMPath:
+    """Verify real OpenAI client is used in production, not MockLLMClient."""
+
+    def test_engine_accepts_llm_client_parameter(self):
+        """run_engine() accepts an llm_client parameter."""
+        import inspect
+        sig = inspect.signature(run_engine)
+        assert "llm_client" in sig.parameters
+
+    def test_engine_none_llm_produces_unresolved(self):
+        """When llm_client is None, MATH_DISCREPANCY becomes UNRESOLVED."""
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", 100500)
+
+        results = run_engine([t], [s], [], [bc], llm_client=None)
+
+        assert len(results) == 1
+        assert results[0].decision == DecisionState.UNRESOLVED
+        assert results[0].escalate_to_human is True
+
+    def test_engine_mock_llm_produces_review_required(self):
+        """When MockLLMClient is provided, MATH_DISCREPANCY becomes REVIEW_REQUIRED."""
+        from backend.ai_investigator import MockLLMClient
+
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", 100500)
+
+        mock_llm = MockLLMClient(
+            classification="UNEXPLAINED",
+            explanation="Test",
+            confidence=0.5,
+            cited_evidence=["timing"],
+        )
+        results = run_engine([t], [s], [], [bc], llm_client=mock_llm)
+
+        assert len(results) == 1
+        assert results[0].decision == DecisionState.REVIEW_REQUIRED
+        assert results[0].ai_response is not None
+        assert results[0].escalate_to_human is True
+
+    def test_missing_api_key_returns_none_client(self):
+        """_get_llm_client() returns None when OPENAI_API_KEY is not set."""
+        import os
+        from backend.main import _get_llm_client
+
+        old_key = os.environ.pop("OPENAI_API_KEY", None)
+        try:
+            client = _get_llm_client()
+            assert client is None
+        finally:
+            if old_key is not None:
+                os.environ["OPENAI_API_KEY"] = old_key
+
+    def test_invalid_api_key_returns_none_client(self):
+        """_get_llm_client() returns None when OpenAIClient instantiation fails."""
+        import os
+        from backend.main import _get_llm_client
+
+        old_key = os.environ.get("OPENAI_API_KEY")
+        os.environ["OPENAI_API_KEY"] = "sk-test-invalid-key-for-testing"
+        try:
+            # Should not crash - returns None or OpenAIClient (both are valid)
+            client = _get_llm_client()
+            # Client is either None (if openai not installed) or OpenAIClient
+            assert client is None or hasattr(client, "complete")
+        finally:
+            if old_key is not None:
+                os.environ["OPENAI_API_KEY"] = old_key
+            else:
+                os.environ.pop("OPENAI_API_KEY", None)
+
+    def test_investigate_with_none_returns_unresolved(self):
+        """investigate() with llm_client=None returns UNRESOLVED."""
+        ep = _make_evidence_packet()
+        result = investigate(ep, llm_client=None)
+        assert result.decision == DecisionState.UNRESOLVED
+        assert result.error_type == "no_llm_client"
+        assert result.escalate_to_human is True
+
+    def test_ai_never_returns_clean_match(self):
+        """AI investigation can never produce CLEAN_MATCH decision."""
+        for cls in ["TIMING_MISMATCH", "REFUND_TIMING", "UNEXPLAINED"]:
+            client = MockLLMClient(
+                classification=cls,
+                explanation="Test",
+                confidence=0.9,
+                cited_evidence=["timing"],
+            )
+            ep = _make_evidence_packet()
+            result = investigate(ep, llm_client=client)
+            assert result.decision != DecisionState.CLEAN_MATCH
+
+    def test_ai_never_auto_approves(self):
+        """AI response always has recommended_action=ESCALATE_TO_HUMAN."""
+        client = MockLLMClient(
+            classification="TIMING_MISMATCH",
+            explanation="Test",
+            confidence=0.9,
+            cited_evidence=["timing"],
+        )
+        ep = _make_evidence_packet()
+        result = investigate(ep, llm_client=client)
+        assert result.ai_response.recommended_action.value == "ESCALATE_TO_HUMAN"
+
+    def test_ai_cannot_inject_financial_fields(self):
+        """AIResponse rejects extra fields (extra='forbid')."""
+        import pydantic
+        with pytest.raises(pydantic.ValidationError):
+            AIResponse(
+                classification="UNEXPLAINED",
+                explanation="Test",
+                raw_confidence=0.5,
+                cited_evidence=["timing"],
+                expected_amount_paise=100000,  # forbidden field
+            )

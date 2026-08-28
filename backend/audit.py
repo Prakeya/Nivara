@@ -90,6 +90,9 @@ class AuditRecord:
 # Audit logger
 # ---------------------------------------------------------------------------
 
+DEFAULT_AUDIT_DIR = "data/audit"
+
+
 class AuditLogger:
     """Append-only audit logger backed by SQLite.
 
@@ -99,7 +102,7 @@ class AuditLogger:
         records = logger.get_batch("upload_hash_abc")
     """
 
-    def __init__(self, db_path: str = "audit.db"):
+    def __init__(self, db_path: str = "data/audit/audit.db"):
         self.db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
         self._init_db()

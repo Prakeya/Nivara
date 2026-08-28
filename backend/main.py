@@ -11,6 +11,7 @@ Endpoints:
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -58,7 +59,37 @@ class JobResult:
 
 
 _jobs: dict[str, JobResult] = {}
-_audits: dict[str, AuditLogger] = {}
+
+
+# ---------------------------------------------------------------------------
+# Audit DB path (persistent, survives restart)
+# ---------------------------------------------------------------------------
+
+_AUDIT_DB_DIR = Path("data/audit")
+_AUDIT_DB_PATH = _AUDIT_DB_DIR / "audit.db"
+
+
+def _get_audit_logger() -> AuditLogger:
+    """Return an AuditLogger backed by the persistent SQLite DB."""
+    _AUDIT_DB_DIR.mkdir(parents=True, exist_ok=True)
+    return AuditLogger(str(_AUDIT_DB_PATH))
+
+
+def _get_llm_client():
+    """Return the production LLM client based on environment configuration.
+
+    - If OPENAI_API_KEY is set → OpenAIClient (real LLM)
+    - If OPENAI_API_KEY is missing → None (investigate() returns UNRESOLVED)
+    - Never crashes the application.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from backend.ai_investigator import OpenAIClient
+        return OpenAIClient(api_key=api_key)
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -66,12 +97,9 @@ _audits: dict[str, AuditLogger] = {}
 # ---------------------------------------------------------------------------
 
 def _compute_hash(file_paths: list[str]) -> str:
-    """Compute SHA-256 hash of concatenated file contents."""
-    h = hashlib.sha256()
-    for fp in sorted(file_paths):
-        with open(fp, "rb") as f:
-            h.update(f.read())
-    return h.hexdigest()[:16]
+    """Compute SHA-256 hash using canonical ingestion hash (sort CSVs by first column)."""
+    from backend.ingestion import compute_upload_hash
+    return compute_upload_hash(file_paths)
 
 
 def _result_to_dict(r) -> dict:
@@ -114,7 +142,8 @@ async def upload_files(
 ) -> JSONResponse:
     """Accept 4 CSV files, process reconciliation, return job_id."""
     job_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    from datetime import timezone
+    created_at = datetime.now(timezone.utc).isoformat()
 
     # Save uploaded files to temp directory
     tmp_dir = tempfile.mkdtemp()
@@ -149,12 +178,14 @@ async def upload_files(
             bank_credits_path=file_paths[3],
         )
 
-        # Run engine
+        # Run engine with real LLM client (or None if no API key)
+        llm_client = _get_llm_client()
         results = run_engine(
             transactions=ingestion.transactions,
             settlements=ingestion.settlements,
             refunds=ingestion.refunds,
             bank_credits=ingestion.bank_credits,
+            llm_client=llm_client,
         )
 
         # Batch analysis
@@ -170,8 +201,8 @@ async def upload_files(
             for p in patterns
         ]
 
-        # Audit log
-        audit = AuditLogger(Path(tmp_dir) / "audit.db")
+        # Audit log (persistent storage)
+        audit = _get_audit_logger()
         audit.log_batch(upload_hash, results)
         audit_records = [r.to_dict() for r in audit.get_batch(upload_hash)]
 
@@ -192,11 +223,7 @@ async def upload_files(
             )
         )
         ai_inv = sum(1 for r in results if r.ai_response is not None)
-        ai_auto = sum(
-            1 for r in results
-            if r.ai_response is not None
-            and r.ai_response.recommended_action.value == "AUTO_APPROVE"
-        )
+        ai_auto = 0  # AI never auto-approves (enforced by schema)
 
         job.status = "completed"
         job.total_settlements = len(results)
@@ -209,8 +236,6 @@ async def upload_files(
         job.results = [_result_to_dict(r) for r in results]
         job.batch_analysis = batch_analysis
         job.audit_records = audit_records
-
-        _audits[upload_hash] = audit
 
     except Exception as exc:
         job.status = "error"
@@ -263,12 +288,13 @@ async def get_status(job_id: str) -> JSONResponse:
 
 @app.get("/audit/{upload_hash}")
 async def get_audit(upload_hash: str) -> JSONResponse:
-    """Return all audit records for a given upload hash."""
-    audit = _audits.get(upload_hash)
-    if audit is None:
+    """Return all audit records for a given upload hash.
+    Reads directly from the persistent SQLite database."""
+    audit = _get_audit_logger()
+    records = audit.get_batch(upload_hash)
+    if not records:
         raise HTTPException(status_code=404, detail=f"Audit not found for hash {upload_hash}")
 
-    records = audit.get_batch(upload_hash)
     return JSONResponse(content={
         "upload_hash": upload_hash,
         "total_records": len(records),
@@ -282,16 +308,15 @@ async def get_audit(upload_hash: str) -> JSONResponse:
 
 @app.get("/settlement/{settlement_id}")
 async def get_settlement(settlement_id: str) -> JSONResponse:
-    """Return audit history for a settlement across all batches."""
-    all_records = []
-    for audit in _audits.values():
-        history = audit.get_settlement_history(settlement_id)
-        all_records.extend([r.payload() for r in history])
+    """Return audit history for a settlement across all batches.
+    Reads directly from the persistent SQLite database."""
+    audit = _get_audit_logger()
+    history = audit.get_settlement_history(settlement_id)
 
     return JSONResponse(content={
         "settlement_id": settlement_id,
-        "total_records": len(all_records),
-        "records": all_records,
+        "total_records": len(history),
+        "records": [r.payload() for r in history],
     })
 
 

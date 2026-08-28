@@ -22,6 +22,7 @@ def _make_result(
     decision: DecisionState,
     difference_paise: int = 0,
     checks_failed: list[str] | None = None,
+    checks_passed: list[str] | None = None,
 ) -> ReconciliationResult:
     return ReconciliationResult(
         settlement_id=settlement_id,
@@ -29,7 +30,7 @@ def _make_result(
         difference_paise=difference_paise,
         expected_amount_paise=100000,
         actual_amount_paise=100000 + difference_paise,
-        deterministic_checks_passed=["schema_validation"],
+        deterministic_checks_passed=checks_passed or ["schema_validation"],
         deterministic_checks_failed=checks_failed or [],
         escalate_to_human=decision != DecisionState.CLEAN_MATCH,
     )
@@ -54,16 +55,11 @@ def _make_settlement(sid: str, created_at: str = "2026-08-20T10:00:00Z") -> dict
 class TestFeeRounding:
     def test_detects_identical_fee_discrepancy(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "duplicate_detection", "reference_existence", "linkage_consistency", "fee_validation", "tax_validation", "bank_credit_existence", "utr_cross_check", "amount_cross_check", "expected_amount_calculation", "difference_calculation"]),
+            _make_result("S2", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "duplicate_detection", "reference_existence", "linkage_consistency", "fee_validation", "tax_validation", "bank_credit_existence", "utr_cross_check", "amount_cross_check", "expected_amount_calculation", "difference_calculation"]),
             _make_result("S3", DecisionState.CLEAN_MATCH, 0),
         ]
-        gt = [
-            _make_gt("S1", "fee_mismatch"),
-            _make_gt("S2", "fee_mismatch"),
-            _make_gt("S3", "clean_match"),
-        ]
-        patterns = analyze_batch(results, gt)
+        patterns = analyze_batch(results)
         assert len(patterns) >= 1
         fee_pattern = next(p for p in patterns if p.pattern_type == PatternType.SYSTEMATIC_FEE_ROUNDING)
         assert "S1" in fee_pattern.affected_settlement_ids
@@ -72,23 +68,18 @@ class TestFeeRounding:
 
     def test_single_fee_mismatch_no_pattern(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "fee_validation"]),
         ]
-        gt = [_make_gt("S1", "fee_mismatch")]
-        patterns = analyze_batch(results, gt)
+        patterns = analyze_batch(results)
         fee_patterns = [p for p in patterns if p.pattern_type == PatternType.SYSTEMATIC_FEE_ROUNDING]
         assert len(fee_patterns) == 0
 
     def test_different_fee_discrepancies_no_pattern(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, -10, ["fee_validation"]),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "fee_validation"]),
+            _make_result("S2", DecisionState.MATH_DISCREPANCY, -10, checks_failed=[], checks_passed=["schema_validation", "fee_validation"]),
         ]
-        gt = [
-            _make_gt("S1", "fee_mismatch"),
-            _make_gt("S2", "fee_mismatch"),
-        ]
-        patterns = analyze_batch(results, gt)
+        patterns = analyze_batch(results)
         fee_patterns = [p for p in patterns if p.pattern_type == PatternType.SYSTEMATIC_FEE_ROUNDING]
         assert len(fee_patterns) == 0
 
@@ -131,36 +122,19 @@ class TestBankDelay:
 class TestRefundCluster:
     def test_detects_same_date_refund_issues(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 100),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 200),
+            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 100, checks_failed=["refund_overage"]),
+            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 200, checks_failed=["refund_overage"]),
         ]
-        gt = [
-            _make_gt("S1", "refund_timing"),
-            _make_gt("S2", "refund_timing"),
-        ]
-        settlements = [
-            _make_settlement("S1", "2026-08-20T10:00:00Z"),
-            _make_settlement("S2", "2026-08-20T14:00:00Z"),
-        ]
-        patterns = analyze_batch(results, gt, settlements)
+        patterns = analyze_batch(results)
         refund_patterns = [p for p in patterns if p.pattern_type == PatternType.REFUND_CLUSTER]
         assert len(refund_patterns) >= 1
-        assert "2026-08-20" in refund_patterns[0].description
 
     def test_different_dates_no_cluster(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 100),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 200),
+            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 100, checks_failed=["fee_validation"]),
+            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 200, checks_failed=["fee_validation"]),
         ]
-        gt = [
-            _make_gt("S1", "refund_timing"),
-            _make_gt("S2", "refund_timing"),
-        ]
-        settlements = [
-            _make_settlement("S1", "2026-08-20T10:00:00Z"),
-            _make_settlement("S2", "2026-08-25T14:00:00Z"),
-        ]
-        patterns = analyze_batch(results, gt, settlements)
+        patterns = analyze_batch(results)
         refund_patterns = [p for p in patterns if p.pattern_type == PatternType.REFUND_CLUSTER]
         assert len(refund_patterns) == 0
 
@@ -172,30 +146,21 @@ class TestRefundCluster:
 class TestUnexplainedGap:
     def test_detects_similar_unexplained_gaps(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 1000),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 1050),
-            _make_result("S3", DecisionState.DETERMINISTIC_EXCEPTION, 980),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, 1000),
+            _make_result("S2", DecisionState.MATH_DISCREPANCY, 1050),
+            _make_result("S3", DecisionState.MATH_DISCREPANCY, 980),
         ]
-        gt = [
-            _make_gt("S1", "unexplained"),
-            _make_gt("S2", "unexplained"),
-            _make_gt("S3", "unexplained"),
-        ]
-        patterns = analyze_batch(results, gt)
+        patterns = analyze_batch(results)
         gap_patterns = [p for p in patterns if p.pattern_type == PatternType.REPEATED_UNEXPLAINED_GAP]
         assert len(gap_patterns) >= 1
         assert len(gap_patterns[0].affected_settlement_ids) == 3
 
     def test_different_amounts_no_cluster(self):
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, 1000),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, 5000),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, 1000),
+            _make_result("S2", DecisionState.MATH_DISCREPANCY, 5000),
         ]
-        gt = [
-            _make_gt("S1", "unexplained"),
-            _make_gt("S2", "unexplained"),
-        ]
-        patterns = analyze_batch(results, gt)
+        patterns = analyze_batch(results)
         gap_patterns = [p for p in patterns if p.pattern_type == PatternType.REPEATED_UNEXPLAINED_GAP]
         assert len(gap_patterns) == 0
 
@@ -257,26 +222,32 @@ class TestIntegration:
             data["refunds"],
             data["bank_credits"],
         )
-        patterns = analyze_batch(results, data["ground_truth"], data["settlements"])
+        patterns = analyze_batch(results, data["settlements"], data["settlements"])
         # Must detect at least one pattern on synthetic data
         assert len(patterns) >= 1, "Expected at least one pattern on synthetic data"
 
     def test_all_pattern_types_covered(self):
-        """All 4 pattern types can be detected with appropriate data."""
-        # SYSTEMATIC_FEE_ROUNDING
+        """Pattern types detectable from deterministic engine outcomes."""
+        # SYSTEMATIC_FEE_ROUNDING: MATH_DISCREPANCY with fee_validation passed
         results = [
-            _make_result("S1", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
-            _make_result("S2", DecisionState.DETERMINISTIC_EXCEPTION, -5, ["fee_validation"]),
+            _make_result("S1", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "fee_validation"]),
+            _make_result("S2", DecisionState.MATH_DISCREPANCY, -5, checks_failed=[], checks_passed=["schema_validation", "fee_validation"]),
         ]
-        gt = [_make_gt("S1", "fee_mismatch"), _make_gt("S2", "fee_mismatch")]
-        p = analyze_batch(results, gt)
+        p = analyze_batch(results)
         assert any(pat.pattern_type == PatternType.SYSTEMATIC_FEE_ROUNDING for pat in p)
 
-        # REPEATED_UNEXPLAINED_GAP
+        # REPEATED_UNEXPLAINED_GAP: MATH_DISCREPANCY with similar differences
         results = [
-            _make_result("S3", DecisionState.DETERMINISTIC_EXCEPTION, 1000),
-            _make_result("S4", DecisionState.DETERMINISTIC_EXCEPTION, 1020),
+            _make_result("S3", DecisionState.MATH_DISCREPANCY, 1000),
+            _make_result("S4", DecisionState.MATH_DISCREPANCY, 1020),
         ]
-        gt = [_make_gt("S3", "unexplained"), _make_gt("S4", "unexplained")]
-        p = analyze_batch(results, gt)
+        p = analyze_batch(results)
         assert any(pat.pattern_type == PatternType.REPEATED_UNEXPLAINED_GAP for pat in p)
+
+        # REFUND_CLUSTER: DETERMINISTIC_EXCEPTION with refund in checks_failed
+        results = [
+            _make_result("S5", DecisionState.DETERMINISTIC_EXCEPTION, 100, checks_failed=["refund_overage"]),
+            _make_result("S6", DecisionState.DETERMINISTIC_EXCEPTION, 200, checks_failed=["refund_overage"]),
+        ]
+        p = analyze_batch(results)
+        assert any(pat.pattern_type == PatternType.REFUND_CLUSTER for pat in p)
