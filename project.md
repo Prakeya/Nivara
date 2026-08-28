@@ -1,7 +1,7 @@
 # Nivara — AI Settlement Intelligence Agent
 
 **Track:** Razorpay Buildathon Track 04 — AI Finance Controller  
-**Status:** Implementation in progress  
+**Status:** Complete  
 **Architecture Version:** 1.3 (Frozen)
 
 ---
@@ -54,7 +54,7 @@ It processes a batch of 50+ settlements and reports:
 | LLM calculates `expected = payments - refunds` | Python calculates expected amount; LLM never sees raw numbers |
 | LLM says "this looks fine" and approves | LLM classifies only; human must approve |
 | LLM invents a refund to explain a gap | LLM citation validator rejects hallucinated evidence |
-| One cherry-picked demo match | 60-settlement batch with measured accuracy and honest exceptions |
+| One cherry-picked demo match | 80-settlement batch with measured accuracy and honest exceptions |
 
 ---
 
@@ -127,10 +127,10 @@ pip install -r requirements.txt
 ### Generate Synthetic Data
 
 ```bash
-python backend/generator.py --output data/demo/ --count 60
+python backend/generator.py --output data/evaluation/ --count 80
 ```
 
-This creates 60 settlements with known ground truth: clean matches, missing references, bank mismatches, fee mismatches, timing issues, and unexplained gaps.
+This creates 80 settlements with known ground truth: clean matches, missing references, bank mismatches, fee mismatches, timing issues, and unexplained gaps.
 
 ### Run the Backend
 
@@ -140,8 +140,8 @@ uvicorn backend.main:app --reload
 
 ### Upload and Process
 
-1. Open the frontend at `http://localhost:5173`
-2. Drag and drop the 4 CSV files from `data/demo/`
+1. Open the frontend at `http://localhost:8000`
+2. Drag and drop the 4 CSV files from `data/evaluation/`
 3. View the dashboard: match rate, exception list, unresolved cases
 4. Click any settlement to see the full reconciliation trace
 5. Review AI-investigated cases in the human queue
@@ -164,7 +164,7 @@ This runs the full pipeline against ground truth and reports:
 
 | Time | What You Show |
 |---|---|
-| 0:00 | Upload 4 CSVs. Dashboard: "60 processed, 34 clean, 20 exceptions, 6 unresolved, **0 auto-approved**" |
+| 0:00 | Upload 4 CSVs. Dashboard: "80 processed, 45 clean, 30 exceptions, 5 unresolved, **0 auto-approved**" |
 | 0:45 | Click a **CLEAN_MATCH**. Show the reconciliation trace: every amount calculated by Python, no AI involved. |
 | 1:30 | Click a **FEE_MISMATCH**. Show: "AI not required. Deterministic rule identified the exact violation." |
 | 2:00 | Click a **REFUND_TIMING** case. Expand the AI evidence packet. Show the structured JSON sent to the LLM. Confidence: 0.82. Status: **REVIEW_REQUIRED**. |
@@ -172,7 +172,7 @@ This runs the full pipeline against ground truth and reports:
 | 3:15 | Click the **UNRESOLVED** case (₹1,775 gap). AI: "INSUFFICIENT EVIDENCE. ESCALATED TO HUMAN REVIEW." Confidence: 0.15. |
 | 3:45 | Show the **Safety Guarantees** panel. "AI never calculates, never approves, never invents evidence." |
 | 4:00 | Show **Batch Patterns**: "3 settlements on Aug 20 show 1-paise fee mismatches. Suggest reviewing fee rounding rule." |
-| 4:45 | Show **Evaluation Metrics**: "Ground truth: 60 labeled. Match rate 71.7%. False accept 5.0%. **0 auto-approved.**" |
+| 4:45 | Show **Evaluation Metrics**: "Ground truth: 80 labeled. Match rate 87.5%. False accept 5.0%. **0 auto-approved.**" |
 
 ---
 
@@ -198,7 +198,7 @@ This runs the full pipeline against ground truth and reports:
 - Multi-currency (INR/paise only)
 - Chart visualizations (tables are sufficient)
 - LLM fine-tuning (prompt engineering only)
-- Microservices, Docker, Kubernetes (flat Python files)
+- Microservices, Kubernetes (flat Python files)
 
 **See full scope lock:** [architecture.md#scope-lock](architecture.md)
 
@@ -217,10 +217,14 @@ nivara/
 │   ├── ai_investigator.py   # LLM integration (constrained)
 │   ├── batch_analyzer.py    # Cross-settlement pattern detection
 │   ├── audit.py             # Append-only audit logger
-│   └── generator.py         # Synthetic data with ground truth
+│   ├── generator.py         # Synthetic data with ground truth
+│   ├── evaluation.py        # Evaluation harness
+│   └── mcp_client.py        # Razorpay MCP API client
 ├── frontend/                # Minimal React
 ├── tests/                   # Test-first checkpoints
 ├── architecture.md          # Full technical specification
+├── Dockerfile               # Container build
+├── docker-compose.yml       # Container orchestration
 └── README.md                # This file
 ```
 
