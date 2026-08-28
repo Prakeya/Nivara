@@ -52,8 +52,9 @@ class TestLabelTaxonomy:
 
     def test_exception_labels(self):
         expected = {
-            "missing_reference", "duplicate_settlement", "bank_mismatch",
+            "missing_reference", "bank_mismatch",
             "fee_mismatch", "tax_inconsistency", "refund_timing", "unexplained",
+            "adjustment_entry", "refund_after_settlement", "timing_race", "partial_settlement",
         }
         assert EXCEPTION_LABELS == expected
 
@@ -301,7 +302,7 @@ class TestFormatReport:
         gt = [_make_gt("S1", "clean_match")]
         m = evaluate_batch(results, gt, batch_time_seconds=2.5)
         report = format_report(m)
-        assert "2.5 seconds" in report
+        assert "2.50 seconds" in report
 
     def test_label_breakdown_format(self):
         results = [
@@ -365,8 +366,8 @@ class TestIntegration:
         )
 
         m = evaluate_batch(results, data["ground_truth"], batch_time_seconds=48.0)
-        assert m.total == 60
+        assert m.total == 80
         assert 0.0 <= m.match_rate <= 1.0
         assert 0.0 <= m.false_accept_rate <= 1.0
         report = format_report(m)
-        assert "60 settlements" in report
+        assert "80 settlements" in report

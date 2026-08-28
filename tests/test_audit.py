@@ -366,8 +366,8 @@ class TestIntegration:
         )
 
         records = logger.log_batch("eval_hash", results)
-        # One record per settlement processed (60 settlements in default batch)
-        assert len(records) == 60
+        # One record per settlement processed (80 settlements in default batch)
+        assert len(records) == 80
 
         # Every result has exactly one audit record
         for result in results:
@@ -375,10 +375,10 @@ class TestIntegration:
             assert len(matching) >= 1
 
         # upload_hash groups correctly
-        assert logger.total_records("eval_hash") == 60
+        assert logger.total_records("eval_hash") == 80
 
         counts = logger.count_by_decision("eval_hash")
         total_from_counts = sum(counts.values())
-        assert total_from_counts == 60
+        assert total_from_counts == 80
 
         logger.close()

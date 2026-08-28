@@ -685,8 +685,10 @@ class TestBatchEngine:
 
         assert len(results) == 2
         assert results[0].decision == DecisionState.CLEAN_MATCH
-        assert results[1].decision == DecisionState.DETERMINISTIC_EXCEPTION
+        # DETERMINISTIC_EXCEPTION gets AI investigation → REVIEW_REQUIRED
+        assert results[1].decision == DecisionState.REVIEW_REQUIRED
         assert "tax_validation" in results[1].deterministic_checks_failed
+        assert results[1].ai_response is not None
 
     def test_empty_batch(self):
         results = run_engine([], [], [], [])

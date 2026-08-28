@@ -30,7 +30,7 @@ class TestPerformance:
         )
         elapsed = time.time() - start
 
-        assert len(results) == 60
+        assert len(results) == 80
         assert elapsed < 60, f"60-record batch took {elapsed:.1f}s (limit: 60s)"
 
     def test_evaluation_under_60s(self):
@@ -48,7 +48,7 @@ class TestPerformance:
         elapsed = time.time() - start
 
         assert elapsed < 60
-        assert metrics.total == 60
+        assert metrics.total == 80
         assert 0 <= metrics.match_rate <= 1
         assert 0 <= metrics.false_accept_rate <= 1
         assert metrics.ai_auto_approval_rate_pct == 0.0
@@ -101,7 +101,7 @@ class TestDemoScenario:
 
         # Safety invariants
         assert metrics.ai_auto_approval_rate_pct == 0.0
-        assert metrics.total == 60
+        assert metrics.total == 80
 
     def test_clean_matches_pass_all_checks(self):
         """CLEAN_MATCH settlements have difference==0 and all checks pass."""

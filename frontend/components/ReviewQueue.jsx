@@ -63,7 +63,10 @@ function ReviewQueue({ results, onSelect }) {
                 <td style={{fontSize: '0.8rem', color: 'var(--text-secondary)', maxWidth: 280}}>{reason(r)}</td>
                 <td>
                   {r.ai_response
-                    ? <span style={{fontSize:'0.8rem'}}>{r.ai_response.classification} ({(r.ai_response.raw_confidence * 100).toFixed(0)}%)</span>
+                    ? <span style={{fontSize:'0.8rem'}}>
+                        {r.ai_mode === "demo" && <span className="badge mock-tag" style={{marginRight: 4}}>DEMO</span>}
+                        {r.ai_response.classification} {r.ai_mode === "demo" ? "(heuristic)" : `(${(r.ai_response.raw_confidence * 100).toFixed(0)}%)`}
+                      </span>
                     : <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>Pending</span>
                   }
                 </td>

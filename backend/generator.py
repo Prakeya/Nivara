@@ -269,24 +269,81 @@ def _gen_missing_reference(
     return settlement, [], [], [bank_credit], gt
 
 
-def _gen_duplicate_settlement(
+def _gen_adjustment_entry(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-    existing_settlements: list[dict],
 ) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
-    """Generate a settlement that shares its ID with an earlier settlement."""
-    # Pick a random earlier settlement to duplicate
-    donor = rng.choice(existing_settlements)
-    sid = donor["settlement_id"]
+    """Settlement amount includes an adjustment not reflected in payments.
 
-    # Create new payments for this duplicate
-    n_payments = rng.randint(1, 3)
+    The engine computes expected = payments - refunds - fees - tax.
+    The actual settlement amount differs because of an adjustment.
+    The engine sees all checks pass but difference != 0 → MATH_DISCREPANCY.
+    This is a genuinely ambiguous case: the adjustment is legitimate but
+    the engine has no way to know about it.
+    """
+    sid = f"SETL_{idx:04d}"
+    n_payments = rng.randint(2, 3)
     linked_pids = []
     transactions = []
     for j in range(n_payments):
-        pid = f"PAY_DUP_{idx:04d}_{j:02d}"
+        pid = f"PAY_{idx:04d}_{j:02d}"
         amount = _random_amount(rng)
+        method = _random_method(rng)
+        created_at = _ts(base_date, rng, 24)
+        t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+        linked_pids.append(pid)
+        transactions.append(t)
+
+    linked_pay_dicts = [
+        {"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]} for t in transactions
+    ]
+    expected_without_adjustment = _settlement_amount(linked_pay_dicts, [])
+
+    # Adjustment: small positive or negative amount (platform fee adjustment, reversal, etc.)
+    adjustment = rng.choice([-1, 1]) * rng.randint(50, 5000)
+    actual = expected_without_adjustment + adjustment
+    if actual <= 0:
+        actual = expected_without_adjustment + abs(adjustment) + 1000
+
+    utr = f"UTR_{idx:04d}"
+    created_at = _ts(base_date, rng, 12)
+    settled_at = created_at + timedelta(hours=rng.randint(6, 24))
+    settlement = _make_settlement(
+        sid, actual, utr, created_at, settled_at, linked_pids, [],
+    )
+    bank_credit = _make_bank_credit(utr, actual, settled_at.date())
+
+    gt = {
+        "settlement_id": sid,
+        "label": "adjustment_entry",
+        "expected_amount_paise": expected_without_adjustment,
+        "actual_amount_paise": actual,
+        "difference_paise": actual - expected_without_adjustment,
+    }
+    return settlement, transactions, [], [bank_credit], gt
+
+
+def _gen_refund_after_settlement(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Refund processed after settlement — not in linked_refund_ids.
+
+    The settlement amount was computed correctly at settlement time (without
+    this refund). The engine computes expected the same way → difference == 0.
+    But the merchant was actually overpaid because the refund should have been
+    deducted. This is a false negative: the engine says CLEAN_MATCH but the
+    ground truth says exception.
+    """
+    sid = f"SETL_{idx:04d}"
+    n_payments = rng.randint(2, 3)
+    linked_pids = []
+    transactions = []
+    for j in range(n_payments):
+        pid = f"PAY_{idx:04d}_{j:02d}"
+        amount = _random_amount(rng, 20000, 300000)
         method = _random_method(rng)
         created_at = _ts(base_date, rng, 24)
         t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
@@ -298,7 +355,18 @@ def _gen_duplicate_settlement(
     ]
     settlement_amt = _settlement_amount(linked_pay_dicts, [])
 
-    utr = f"UTR_DUP_{idx:04d}"
+    # Refund created after settlement — NOT in linked_refund_ids
+    late_refund_pid = rng.choice(linked_pids)
+    late_refund_amount = rng.randint(500, min(
+        next(t["amount"] for t in transactions if t["payment_id"] == late_refund_pid),
+        10000,
+    ))
+    late_refund_created = settled_at = base_date + timedelta(hours=rng.randint(48, 72))
+    late_refund = _make_refund(
+        f"REF_LATE_{idx:04d}_00", late_refund_pid, late_refund_amount, late_refund_created,
+    )
+
+    utr = f"UTR_{idx:04d}"
     created_at = _ts(base_date, rng, 12)
     settled_at = created_at + timedelta(hours=rng.randint(6, 24))
     settlement = _make_settlement(
@@ -308,12 +376,71 @@ def _gen_duplicate_settlement(
 
     gt = {
         "settlement_id": sid,
-        "label": "duplicate_settlement",
+        "label": "refund_after_settlement",
         "expected_amount_paise": settlement_amt,
         "actual_amount_paise": settlement_amt,
         "difference_paise": 0,
     }
-    return settlement, transactions, [], [bank_credit], gt
+    return settlement, transactions, [late_refund], [bank_credit], gt
+
+
+def _gen_timing_race(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Refund created between settlement creation and bank credit.
+
+    The refund is processed during the settlement window but is NOT included
+    in linked_refund_ids. The settlement amount doesn't account for it.
+    The engine sees difference == 0 → CLEAN_MATCH, but the merchant received
+    more than they should have. False negative.
+    """
+    sid = f"SETL_{idx:04d}"
+    n_payments = rng.randint(2, 3)
+    linked_pids = []
+    transactions = []
+    for j in range(n_payments):
+        pid = f"PAY_{idx:04d}_{j:02d}"
+        amount = _random_amount(rng, 20000, 300000)
+        method = _random_method(rng)
+        created_at = _ts(base_date, rng, 24)
+        t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+        linked_pids.append(pid)
+        transactions.append(t)
+
+    linked_pay_dicts = [
+        {"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]} for t in transactions
+    ]
+    settlement_amt = _settlement_amount(linked_pay_dicts, [])
+
+    # Refund created during the settlement processing window (between created_at and settled_at)
+    race_pid = rng.choice(linked_pids)
+    race_refund_amount = rng.randint(500, min(
+        next(t["amount"] for t in transactions if t["payment_id"] == race_pid),
+        8000,
+    ))
+    race_refund = _make_refund(
+        f"REF_RACE_{idx:04d}_00", race_pid, race_refund_amount,
+        base_date + timedelta(hours=rng.randint(1, 23), minutes=rng.randint(0, 59)),
+    )
+
+    utr = f"UTR_{idx:04d}"
+    created_at = _ts(base_date, rng, 12)
+    settled_at = created_at + timedelta(hours=rng.randint(6, 24))
+    settlement = _make_settlement(
+        sid, settlement_amt, utr, created_at, settled_at, linked_pids, [],
+    )
+    bank_credit = _make_bank_credit(utr, settlement_amt, settled_at.date())
+
+    gt = {
+        "settlement_id": sid,
+        "label": "timing_race",
+        "expected_amount_paise": settlement_amt,
+        "actual_amount_paise": settlement_amt,
+        "difference_paise": 0,
+    }
+    return settlement, transactions, [race_refund], [bank_credit], gt
 
 
 def _gen_bank_mismatch(
@@ -556,6 +683,61 @@ def _gen_refund_timing(
     return settlement, transactions, refund_list, [bank_credit], gt
 
 
+def _gen_partial_settlement(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Bank credited only a partial amount of the settlement.
+
+    The settlement amount is correct, but the bank credit is less.
+    The engine's Check 9 (amount_cross_check) catches this.
+    Tests the engine's ability to detect partial payouts.
+    """
+    sid = f"SETL_{idx:04d}"
+    n_payments = rng.randint(2, 4)
+    linked_pids = []
+    transactions = []
+    for j in range(n_payments):
+        pid = f"PAY_{idx:04d}_{j:02d}"
+        amount = _random_amount(rng, 50000, 400000)
+        method = _random_method(rng)
+        created_at = _ts(base_date, rng, 24)
+        t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+        linked_pids.append(pid)
+        transactions.append(t)
+
+    linked_pay_dicts = [
+        {"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]} for t in transactions
+    ]
+    settlement_amt = _settlement_amount(linked_pay_dicts, [])
+
+    utr = f"UTR_{idx:04d}"
+    created_at = _ts(base_date, rng, 12)
+    settled_at = created_at + timedelta(hours=rng.randint(6, 24))
+    settlement = _make_settlement(
+        sid, settlement_amt, utr, created_at, settled_at, linked_pids, [],
+    )
+
+    # Bank credited only 50-90% of the settlement amount
+    partial_pct = rng.uniform(0.5, 0.9)
+    partial_amount = int(settlement_amt * partial_pct)
+    # Round to nearest 100 for realism
+    partial_amount = (partial_amount // 100) * 100
+    if partial_amount <= 0:
+        partial_amount = settlement_amt // 2
+    bank_credit = _make_bank_credit(utr, partial_amount, settled_at.date())
+
+    gt = {
+        "settlement_id": sid,
+        "label": "partial_settlement",
+        "expected_amount_paise": settlement_amt,
+        "actual_amount_paise": partial_amount,
+        "difference_paise": partial_amount - settlement_amt,
+    }
+    return settlement, transactions, [], [bank_credit], gt
+
+
 def _gen_unexplained(
     idx: int,
     rng: random.Random,
@@ -610,7 +792,7 @@ def _gen_unexplained(
 # ---------------------------------------------------------------------------
 
 def generate_batch(
-    n_settlements: int = 60,
+    n_settlements: int = 80,
     edge_cases: dict[str, int] | None = None,
     seed: int = 42,
 ) -> dict[str, Any]:
@@ -618,17 +800,28 @@ def generate_batch(
     Generate a complete evaluation dataset with ground-truth labels.
 
     Returns dict with keys: settlements, transactions, refunds, bank_credits, ground_truth.
+
+    The dataset includes 11 edge case categories:
+    - 4 easily caught by the deterministic engine (missing_reference, bank_mismatch,
+      fee_mismatch, tax_inconsistency)
+    - 3 caught by the engine but testing different detection paths (refund_timing,
+      same_day_duplicates, partial_settlement)
+    - 4 genuinely ambiguous cases that test the engine's blind spots (adjustment_entry,
+      refund_after_settlement, timing_race, unexplained)
     """
     if edge_cases is None:
         edge_cases = {
             "clean_match": 30,
             "missing_reference": 5,
-            "duplicate_settlement": 2,
             "bank_mismatch": 5,
             "fee_mismatch": 5,
             "tax_inconsistency": 3,
             "refund_timing": 5,
-            "unexplained": 5,
+            "adjustment_entry": 5,
+            "refund_after_settlement": 5,
+            "timing_race": 5,
+            "partial_settlement": 4,
+            "unexplained": 8,
         }
 
     total_edge = sum(edge_cases.values())
@@ -649,7 +842,7 @@ def generate_batch(
     idx = 1
 
     # 1. Clean matches
-    for _ in range(edge_cases["clean_match"]):
+    for _ in range(edge_cases.get("clean_match", 0)):
         s, txns, refs, bcs, gt = _gen_clean_match(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -659,7 +852,7 @@ def generate_batch(
         idx += 1
 
     # 2. Missing references
-    for _ in range(edge_cases["missing_reference"]):
+    for _ in range(edge_cases.get("missing_reference", 0)):
         s, txns, refs, bcs, gt = _gen_missing_reference(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -668,20 +861,8 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 3. Duplicate settlements (each shares ID with an earlier settlement)
-    for _ in range(edge_cases["duplicate_settlement"]):
-        dup_settlement, dup_txns, dup_refs, dup_bcs, dup_gt = _gen_duplicate_settlement(
-            idx, rng, base_date, all_settlements,
-        )
-        all_settlements.append(dup_settlement)
-        all_transactions.extend(dup_txns)
-        all_refunds.extend(dup_refs)
-        all_bank_credits.extend(dup_bcs)
-        all_ground_truth.append(dup_gt)
-        idx += 1
-
-    # 4. Bank mismatches
-    for _ in range(edge_cases["bank_mismatch"]):
+    # 3. Bank mismatches
+    for _ in range(edge_cases.get("bank_mismatch", 0)):
         s, txns, refs, bcs, gt = _gen_bank_mismatch(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -690,8 +871,8 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 5. Fee mismatches
-    for _ in range(edge_cases["fee_mismatch"]):
+    # 4. Fee mismatches
+    for _ in range(edge_cases.get("fee_mismatch", 0)):
         s, txns, refs, bcs, gt = _gen_fee_mismatch(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -700,8 +881,8 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 6. Tax inconsistencies
-    for _ in range(edge_cases["tax_inconsistency"]):
+    # 5. Tax inconsistencies
+    for _ in range(edge_cases.get("tax_inconsistency", 0)):
         s, txns, refs, bcs, gt = _gen_tax_inconsistency(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -710,8 +891,8 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 7. Refund timing
-    for _ in range(edge_cases["refund_timing"]):
+    # 6. Refund timing
+    for _ in range(edge_cases.get("refund_timing", 0)):
         s, txns, refs, bcs, gt = _gen_refund_timing(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -720,8 +901,48 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 8. Unexplained
-    for _ in range(edge_cases["unexplained"]):
+    # 7. Adjustment entries (engine cannot distinguish from unexplained)
+    for _ in range(edge_cases.get("adjustment_entry", 0)):
+        s, txns, refs, bcs, gt = _gen_adjustment_entry(idx, rng, base_date)
+        all_settlements.append(s)
+        all_transactions.extend(txns)
+        all_refunds.extend(refs)
+        all_bank_credits.extend(bcs)
+        all_ground_truth.append(gt)
+        idx += 1
+
+    # 8. Refund after settlement (engine says CLEAN_MATCH — false negative)
+    for _ in range(edge_cases.get("refund_after_settlement", 0)):
+        s, txns, refs, bcs, gt = _gen_refund_after_settlement(idx, rng, base_date)
+        all_settlements.append(s)
+        all_transactions.extend(txns)
+        all_refunds.extend(refs)
+        all_bank_credits.extend(bcs)
+        all_ground_truth.append(gt)
+        idx += 1
+
+    # 9. Timing race (engine says CLEAN_MATCH — false negative)
+    for _ in range(edge_cases.get("timing_race", 0)):
+        s, txns, refs, bcs, gt = _gen_timing_race(idx, rng, base_date)
+        all_settlements.append(s)
+        all_transactions.extend(txns)
+        all_refunds.extend(refs)
+        all_bank_credits.extend(bcs)
+        all_ground_truth.append(gt)
+        idx += 1
+
+    # 10. Partial settlements (bank credited less than expected)
+    for _ in range(edge_cases.get("partial_settlement", 0)):
+        s, txns, refs, bcs, gt = _gen_partial_settlement(idx, rng, base_date)
+        all_settlements.append(s)
+        all_transactions.extend(txns)
+        all_refunds.extend(refs)
+        all_bank_credits.extend(bcs)
+        all_ground_truth.append(gt)
+        idx += 1
+
+    # 11. Unexplained (all checks pass, difference != 0, no known cause)
+    for _ in range(edge_cases.get("unexplained", 0)):
         s, txns, refs, bcs, gt = _gen_unexplained(idx, rng, base_date)
         all_settlements.append(s)
         all_transactions.extend(txns)
@@ -819,8 +1040,8 @@ def main() -> None:
     parser.add_argument(
         "--count", "-n",
         type=int,
-        default=60,
-        help="Total number of settlements to generate (default: 60)",
+        default=80,
+        help="Total number of settlements to generate (default: 80)",
     )
     parser.add_argument(
         "--seed", "-s",
@@ -830,16 +1051,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Default distribution
+    # Default distribution — 11 edge case categories
+    # 4 easily caught, 3 caught via different paths, 4 genuinely ambiguous
     edge_cases = {
         "clean_match": 30,
         "missing_reference": 5,
-        "duplicate_settlement": 2,
         "bank_mismatch": 5,
         "fee_mismatch": 5,
         "tax_inconsistency": 3,
         "refund_timing": 5,
-        "unexplained": 5,
+        "adjustment_entry": 5,
+        "refund_after_settlement": 5,
+        "timing_race": 5,
+        "partial_settlement": 4,
+        "unexplained": 8,
     }
 
     data = generate_batch(n_settlements=args.count, edge_cases=edge_cases, seed=args.seed)

@@ -79,17 +79,19 @@ def _get_llm_client():
     """Return the production LLM client based on environment configuration.
 
     - If OPENAI_API_KEY is set → OpenAIClient (real LLM)
-    - If OPENAI_API_KEY is missing → None (investigate() returns UNRESOLVED)
+    - If OPENAI_API_KEY is missing → DemoLLMClient (heuristic, clearly labeled MOCK)
     - Never crashes the application.
     """
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from backend.ai_investigator import OpenAIClient
-        return OpenAIClient(api_key=api_key)
-    except Exception:
-        return None
+    if api_key:
+        try:
+            from backend.ai_investigator import OpenAIClient
+            return OpenAIClient(api_key=api_key)
+        except Exception:
+            pass
+    # Fallback: deterministic heuristic client for demo mode
+    from backend.ai_investigator import DemoLLMClient
+    return DemoLLMClient()
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +115,7 @@ def _result_to_dict(r) -> dict:
         "deterministic_checks_passed": r.deterministic_checks_passed,
         "deterministic_checks_failed": r.deterministic_checks_failed,
         "escalate_to_human": r.escalate_to_human,
+        "ai_mode": getattr(r, "ai_mode", None),
     }
     if r.ai_response is not None:
         d["ai_response"] = {
@@ -278,6 +281,9 @@ async def get_status(job_id: str) -> JSONResponse:
         content["results"] = job.results
         content["batch_analysis"] = job.batch_analysis
         content["audit_records"] = job.audit_records
+        # Determine ai_mode from results
+        ai_modes = {r.get("ai_mode") for r in job.results if r.get("ai_mode")}
+        content["ai_mode"] = "demo" if "demo" in ai_modes else ("live" if "live" in ai_modes else None)
 
     return JSONResponse(content=content)
 

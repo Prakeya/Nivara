@@ -37,6 +37,7 @@ function HeroMetrics({ status }) {
       </div>
       <div className="metric-footer">
         Match rate: {matchRate}% &nbsp;&bull;&nbsp; AI investigates. Humans decide.
+        {status.ai_mode === "demo" && <span style={{marginLeft: 8, color: '#92400e', fontWeight: 600}}>DETERMINISTIC DEMO — heuristic classifications. Set OPENAI_API_KEY for live LLM.</span>}
       </div>
     </div>
   );
@@ -130,7 +131,9 @@ function ResultsTable({ results, selectedId, onSelect }) {
                 </td>
                 <td style={{textAlign:'center'}}>
                   {r.ai_response
-                    ? <span className="badge ai-tag">AI</span>
+                    ? r.ai_mode === "demo"
+                      ? <span className="badge mock-tag">DEMO</span>
+                      : <span className="badge ai-tag">AI</span>
                     : <span className="badge no-ai">--</span>
                   }
                 </td>
