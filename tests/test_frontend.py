@@ -12,7 +12,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs, _audits
+from backend.main import app, _jobs
 
 client = TestClient(app)
 
@@ -38,7 +38,6 @@ def _csv_bytes(rows: list[dict]) -> bytes:
 class TestFrontendServing:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_index_returns_html(self):
         response = client.get("/")
@@ -100,7 +99,6 @@ class TestFrontendServing:
 class TestDashboardFlow:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_full_upload_then_status_flow(self):
         from backend.generator import generate_batch

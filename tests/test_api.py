@@ -11,7 +11,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs, _audits
+from backend.main import app, _jobs
 from backend.generator import generate_batch
 
 client = TestClient(app)
@@ -68,7 +68,6 @@ class TestHealth:
 class TestUploadAndStatus:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_upload_returns_job_id(self):
         data = generate_batch()
@@ -182,7 +181,6 @@ class TestUploadAndStatus:
 class TestAuditEndpoint:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_audit_returns_records(self):
         data = generate_batch()
@@ -229,7 +227,6 @@ class TestAuditEndpoint:
 class TestSettlementEndpoint:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_settlement_returns_history(self):
         data = generate_batch()
@@ -264,7 +261,6 @@ class TestSettlementEndpoint:
 class TestErrorHandling:
     def setup_method(self):
         _jobs.clear()
-        _audits.clear()
 
     def test_upload_invalid_csv_returns_error(self):
         bad_csv = b"not,valid,csv,data\n"
@@ -282,3 +278,73 @@ class TestErrorHandling:
         status_resp = client.get(f"/status/{body['job_id']}")
         assert status_resp.status_code == 200
         assert status_resp.json()["status"] in ("completed", "error")
+
+
+# ---------------------------------------------------------------------------
+# Audit persistence after restart
+# ---------------------------------------------------------------------------
+
+class TestAuditPersistence:
+    def test_audit_survives_inmemory_clear(self):
+        """Audit records persist in SQLite even after in-memory state is cleared."""
+        data = generate_batch()
+        files = _make_upload_files(data)
+
+        upload_resp = client.post("/upload", files=files)
+        upload_hash = upload_resp.json()["upload_hash"]
+
+        # Verify audit exists
+        audit_resp = client.get(f"/audit/{upload_hash}")
+        assert audit_resp.status_code == 200
+        assert audit_resp.json()["total_records"] > 0
+
+        # Clear in-memory job store (simulates partial restart)
+        _jobs.clear()
+
+        # Audit endpoint still works (reads from SQLite)
+        audit_resp2 = client.get(f"/audit/{upload_hash}")
+        assert audit_resp2.status_code == 200
+        assert audit_resp2.json()["total_records"] > 0
+
+    def test_audit_survives_full_restart_simulation(self):
+        """Audit records survive complete in-memory state reset."""
+        data = generate_batch()
+        files = _make_upload_files(data)
+
+        upload_resp = client.post("/upload", files=files)
+        upload_hash = upload_resp.json()["upload_hash"]
+
+        # Simulate full restart: clear ALL in-memory state
+        _jobs.clear()
+
+        # Audit endpoint reads directly from SQLite
+        audit_resp = client.get(f"/audit/{upload_hash}")
+        assert audit_resp.status_code == 200
+        records = audit_resp.json()["records"]
+        assert len(records) > 0
+
+        # Verify record structure
+        for record in records:
+            assert record["upload_hash"] == upload_hash
+            assert "settlement_id" in record
+            assert "decision_state" in record
+
+    def test_settlement_history_survives_restart(self):
+        """Settlement audit history survives in-memory state reset."""
+        data = generate_batch()
+        files = _make_upload_files(data)
+
+        upload_resp = client.post("/upload", files=files)
+        job_id = upload_resp.json()["job_id"]
+
+        # Get a settlement ID
+        status_resp = client.get(f"/status/{job_id}")
+        sid = status_resp.json()["results"][0]["settlement_id"]
+
+        # Clear in-memory state
+        _jobs.clear()
+
+        # Settlement endpoint reads from SQLite
+        settlement_resp = client.get(f"/settlement/{sid}")
+        assert settlement_resp.status_code == 200
+        assert settlement_resp.json()["total_records"] >= 1

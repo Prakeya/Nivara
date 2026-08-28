@@ -333,6 +333,38 @@ def investigate(
 # Mock LLM client (for testing)
 # ---------------------------------------------------------------------------
 
+class OpenAIClient:
+    """Real LLM client using OpenAI API. Falls back to UNRESOLVED on failure."""
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise LLMError("import_error", "openai package not installed. Run: pip install openai")
+        self._client = OpenAI(api_key=api_key)
+        self._model = model
+
+    def complete(self, messages: list[dict], timeout: float = 10.0) -> dict[str, Any]:
+        import json as _json
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                timeout=timeout,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            return _json.loads(content)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "timeout" in error_msg or "timed out" in error_msg:
+                raise LLMTimeoutError(str(e))
+            elif "api" in error_msg or "rate" in error_msg or "auth" in error_msg:
+                raise LLMAPIError(str(e))
+            else:
+                raise LLMError("unknown_error", str(e))
+
+
 class MockLLMClient:
     """Mock LLM client that returns controlled responses for testing."""
 

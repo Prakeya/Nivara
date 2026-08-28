@@ -142,6 +142,7 @@ def reconcile_settlement(
     bank_credit: Optional[dict],
     linkage_errors: list[dict],
     duplicate_errors: list[dict],
+    linked_bank_utr: Optional[str] = None,
 ) -> ReconciliationResult:
     """
     Run deterministic reconciliation for a single settlement.
@@ -158,10 +159,13 @@ def reconcile_settlement(
     checks_passed.append("schema_validation")
 
     # ── Check 2: Duplicate detection ──
+    settlement_utr = settlement.get("utr")
     relevant_dupes = [
         e for e in duplicate_errors
         if e.get("entity_id") in settlement["linked_payment_ids"]
         or e.get("entity_id") == settlement_id
+        or (settlement_utr and e.get("entity_id") == settlement_utr)
+        or (linked_bank_utr and e.get("entity_id") == linked_bank_utr)
     ]
     if relevant_dupes:
         checks_failed.append("duplicate_detection")
@@ -306,6 +310,7 @@ def run_engine(
     settlements: list[dict],
     refunds: list[dict],
     bank_credits: list[dict],
+    llm_client=None,
 ) -> list[ReconciliationResult]:
     """
     Run deterministic reconciliation for a batch of settlements.
@@ -313,7 +318,13 @@ def run_engine(
     1. Links entities (reuses Phase 3)
     2. Detects duplicates (reuses Phase 2 logic)
     3. Reconciles each settlement
-    4. Catches crashes → UNPROCESSED
+    4. Investigates MATH_DISCREPANCY cases with AI (if llm_client provided)
+    5. Catches crashes → UNPROCESSED
+
+    Args:
+        llm_client: LLM provider for AI investigation. If None, MATH_DISCREPANCY
+            cases are escalated as UNRESOLVED without AI analysis. In production,
+            pass OpenAIClient; in tests, pass MockLLMClient.
     """
     from backend.linking import link_entities
 
@@ -328,6 +339,13 @@ def run_engine(
     dup_utr = detect_cross_file_utr_duplicates(settlements, bank_credits)
     all_duplicates = dup_payment + dup_refund + dup_settlement + dup_utr
 
+    # Build bank credit UTR index for duplicate bank UTR detection
+    bank_credit_utrs: dict[str, str] = {}
+    for bc in bank_credits:
+        utr = bc.get("utr")
+        if utr:
+            bank_credit_utrs[bc.get("settlement_id", "")] = utr
+
     results: list[ReconciliationResult] = []
     for settlement in settlements:
         try:
@@ -335,6 +353,8 @@ def run_engine(
             if lr is None:
                 raise ValueError(f"No linkage result for {settlement['settlement_id']}")
 
+            # Pass linked bank credit UTR for duplicate bank UTR detection
+            linked_bank_utr = lr.bank_credit.get("utr") if lr.bank_credit else None
             result = reconcile_settlement(
                 settlement=settlement,
                 linked_payments=lr.linked_payments,
@@ -342,6 +362,7 @@ def run_engine(
                 bank_credit=lr.bank_credit,
                 linkage_errors=lr.errors,
                 duplicate_errors=all_duplicates,
+                linked_bank_utr=linked_bank_utr,
             )
             results.append(result)
         except Exception:
@@ -357,16 +378,13 @@ def run_engine(
             ))
 
     # Phase 7: AI investigation for MATH_DISCREPANCY cases
-    from backend.ai_investigator import investigate, MockLLMClient
+    from backend.ai_investigator import investigate
     from backend.models import (
         EvidencePacket, LinkedPaymentsSummary, LinkedRefundsSummary,
         FeesSummary, TaxSummary, BankCreditEvidence, TimingEvidence,
         PaymentMethod, ValidationResult,
     )
     from datetime import datetime
-
-    # Use mock LLM for demo (returns controlled responses)
-    mock_llm = MockLLMClient()
 
     for result in results:
         if result.decision == DecisionState.MATH_DISCREPANCY:
@@ -423,11 +441,14 @@ def run_engine(
                         deterministic_checks_failed=result.deterministic_checks_failed,
                     )
 
-                    ai_result = investigate(evidence, llm_client=mock_llm)
+                    ai_result = investigate(evidence, llm_client=llm_client)
                     if ai_result.ai_response is not None:
                         result.ai_response = ai_result.ai_response
-                        # Update decision based on AI investigation
                         result.decision = ai_result.decision
+                        result.escalate_to_human = True
+                    else:
+                        # LLM failed → UNRESOLVED, keep deterministic result otherwise
+                        result.decision = DecisionState.UNRESOLVED
                         result.escalate_to_human = True
                 except Exception:
                     pass  # AI failure → human review (safety invariant)

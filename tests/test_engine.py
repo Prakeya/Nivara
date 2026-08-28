@@ -677,7 +677,7 @@ class TestBatchEngine:
         t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         t2 = _txn("PAY_002", amount=100000, method="upi", fee=0, tax=1)
         s1 = _settlement("SETL_001", amount=100000, linked_pids=["PAY_001"])
-        s2 = _settlement("SETL_002", amount=100000, linked_pids=["PAY_002"])
+        s2 = _settlement("SETL_002", amount=100000, utr="UTR_002", linked_pids=["PAY_002"])
         bc1 = _bank_credit("UTR_001", 100000)
         bc2 = _bank_credit("UTR_002", 100000)
 
@@ -815,3 +815,109 @@ class TestEdgeCases:
 
         assert result.decision == DecisionState.DETERMINISTIC_EXCEPTION
         assert "utr_cross_check" in result.deterministic_checks_failed
+
+
+# ---------------------------------------------------------------------------
+# DUPLICATE_BANK_UTR safety regression
+# ---------------------------------------------------------------------------
+
+class TestDuplicateBankUTRSafety:
+    """Duplicate bank UTR must never result in CLEAN_MATCH."""
+
+    def test_duplicate_bank_utr_with_matching_settlement_utr(self):
+        """Settlement UTR matches the duplicated bank UTR → must be caught."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        t2 = _txn("PAY_002", amount=100000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR_DUP", linked_pids=["PAY_001"])
+        s2 = _settlement("SETL_002", amount=100000, utr="UTR_DUP", linked_pids=["PAY_002"])
+        bc1 = _bank_credit("UTR_DUP", 100000)
+        bc2 = _bank_credit("UTR_DUP", 100000)
+
+        results = run_engine([t1, t2], [s1, s2], [], [bc1, bc2])
+
+        for r in results:
+            assert r.decision != DecisionState.CLEAN_MATCH, (
+                f"Settlement {r.settlement_id} must not be CLEAN_MATCH with duplicate bank UTR"
+            )
+
+    def test_duplicate_bank_utr_with_different_settlement_utr(self):
+        """Settlement UTR differs from duplicated bank UTR → must still be caught via linked_bank_utr."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        t2 = _txn("PAY_002", amount=100000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR_S1", linked_pids=["PAY_001"])
+        s2 = _settlement("SETL_002", amount=100000, utr="UTR_S2", linked_pids=["PAY_002"])
+        bc1 = _bank_credit("UTR_DUP", 100000)
+        bc2 = _bank_credit("UTR_DUP", 100000)
+
+        results = run_engine([t1, t2], [s1, s2], [], [bc1, bc2])
+
+        for r in results:
+            assert r.decision != DecisionState.CLEAN_MATCH, (
+                f"Settlement {r.settlement_id} must not be CLEAN_MATCH with duplicate bank UTR"
+            )
+
+    def test_duplicate_bank_utr_perfect_math(self):
+        """Even with mathematically perfect settlement, duplicate bank UTR blocks CLEAN_MATCH.
+        
+        Tests the reconcile_settlement function directly with linked_bank_utr parameter,
+        which is the core safety mechanism. The run_engine integration test uses distinct
+        UTRs for linking clarity.
+        """
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=100000, utr="UTR_S1", linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_DUP", 100000)
+
+        duplicate_errors = [{
+            "error_type": "DUPLICATE_BANK_UTR",
+            "entity_id": "UTR_DUP",
+            "message": "Duplicate UTR in bank_credits: UTR_DUP",
+        }]
+
+        result = reconcile_settlement(
+            settlement=s,
+            linked_payments=[t],
+            linked_refunds=[],
+            bank_credit=bc,
+            linkage_errors=[],
+            duplicate_errors=duplicate_errors,
+            linked_bank_utr="UTR_DUP",
+        )
+
+        assert result.decision == DecisionState.DETERMINISTIC_EXCEPTION
+        assert "duplicate_detection" in result.deterministic_checks_failed
+
+    def test_no_duplicate_bank_utr_allows_clean(self):
+        """Without duplicate bank UTR, a perfect settlement can be CLEAN_MATCH."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR_S1", linked_pids=["PAY_001"])
+        bc1 = _bank_credit("UTR_S1", 100000)
+
+        results = run_engine([t1], [s1], [], [bc1])
+
+        assert len(results) == 1
+        assert results[0].decision == DecisionState.CLEAN_MATCH
+
+    def test_linked_bank_utr_parameter_catches_duplicate(self):
+        """Direct test of reconcile_settlement with linked_bank_utr parameter."""
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=100000, utr="UTR_S1", linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_DUP", 100000)
+
+        duplicate_errors = [{
+            "error_type": "DUPLICATE_BANK_UTR",
+            "entity_id": "UTR_DUP",
+            "message": "Duplicate UTR in bank_credits: UTR_DUP",
+        }]
+
+        result = reconcile_settlement(
+            settlement=s,
+            linked_payments=[t],
+            linked_refunds=[],
+            bank_credit=bc,
+            linkage_errors=[],
+            duplicate_errors=duplicate_errors,
+            linked_bank_utr="UTR_DUP",
+        )
+
+        assert result.decision == DecisionState.DETERMINISTIC_EXCEPTION
+        assert "duplicate_detection" in result.deterministic_checks_failed
