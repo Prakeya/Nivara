@@ -923,3 +923,35 @@ class TestDuplicateBankUTRSafety:
 
         assert result.decision == DecisionState.DETERMINISTIC_EXCEPTION
         assert "duplicate_detection" in result.deterministic_checks_failed
+
+
+# ---------------------------------------------------------------------------
+# AI investigation exception fallback (P0 safety fix)
+# ---------------------------------------------------------------------------
+
+class TestAIInvestigationExceptionFallback:
+    """If investigate() raises unexpectedly, settlement becomes UNRESOLVED."""
+
+    def test_ai_investigation_exception_becomes_unresolved(self):
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=99999, linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", 99999)
+
+        with patch("backend.ai_investigator.investigate", side_effect=RuntimeError("LLM down")):
+            results = run_engine([t], [s], [], [bc])
+
+        assert len(results) == 1
+        assert results[0].decision == DecisionState.UNRESOLVED
+        assert results[0].escalate_to_human is True
+
+    def test_ai_investigation_exception_logs_warning(self, caplog):
+        import logging
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s = _settlement("SETL_001", amount=99999, linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", 99999)
+
+        with caplog.at_level(logging.WARNING, logger="nivara.engine"):
+            with patch("backend.ai_investigator.investigate", side_effect=RuntimeError("LLM down")):
+                run_engine([t], [s], [], [bc])
+
+        assert any("AI investigation failed" in rec.message for rec in caplog.records)

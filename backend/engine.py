@@ -24,6 +24,7 @@ Outcomes:
 - UNPROCESSED: engine crash
 """
 
+import logging
 from typing import Optional
 
 from backend.models import (
@@ -32,6 +33,8 @@ from backend.models import (
     ReconciliationResult,
 )
 from backend.linking import LinkageResult, LinkageError
+
+logger = logging.getLogger("nivara.engine")
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +171,7 @@ def reconcile_settlement(
     # ── Check 1: Schema & validation ──
     # Handled by ingestion; assumed valid here
     checks_passed.append("schema_validation")
+    logger.info("Check schema_validation for %s: PASS", settlement_id)
 
     # ── Check 2: Duplicate detection ──
     settlement_utr = settlement.get("utr")
@@ -180,9 +184,11 @@ def reconcile_settlement(
     ]
     if relevant_dupes:
         checks_failed.append("duplicate_detection")
+        logger.info("Check duplicate_detection for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("duplicate_detection")
+        logger.info("Check duplicate_detection for %s: PASS", settlement_id)
 
     # ── Check 3: Reference existence ──
     ref_errors = [
@@ -191,9 +197,11 @@ def reconcile_settlement(
     ]
     if ref_errors:
         checks_failed.append("reference_existence")
+        logger.info("Check reference_existence for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("reference_existence")
+        logger.info("Check reference_existence for %s: PASS", settlement_id)
 
     # ── Check 4: Linkage consistency ──
     linkage_types = {
@@ -207,9 +215,11 @@ def reconcile_settlement(
     ]
     if linkage_consistency_errors:
         checks_failed.append("linkage_consistency")
+        logger.info("Check linkage_consistency for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("linkage_consistency")
+        logger.info("Check linkage_consistency for %s: PASS", settlement_id)
 
     # ── Check 5: Fee validation ──
     fee_mismatches: list[str] = []
@@ -221,9 +231,11 @@ def reconcile_settlement(
 
     if fee_mismatches:
         checks_failed.append("fee_validation")
+        logger.info("Check fee_validation for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("fee_validation")
+        logger.info("Check fee_validation for %s: PASS", settlement_id)
 
     # ── Check 6: Tax validation ──
     tax_mismatches: list[str] = []
@@ -234,38 +246,48 @@ def reconcile_settlement(
 
     if tax_mismatches:
         checks_failed.append("tax_validation")
+        logger.info("Check tax_validation for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("tax_validation")
+        logger.info("Check tax_validation for %s: PASS", settlement_id)
 
     # ── Check 7: Bank credit existence ──
     if bank_credit is None:
         checks_failed.append("bank_credit_existence")
+        logger.info("Check bank_credit_existence for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("bank_credit_existence")
+        logger.info("Check bank_credit_existence for %s: PASS", settlement_id)
 
     # ── Check 8: UTR cross-check ──
     settlement_utr = settlement.get("utr")
     bank_utr = bank_credit.get("utr")
     if settlement_utr and bank_utr and settlement_utr != bank_utr:
         checks_failed.append("utr_cross_check")
+        logger.info("Check utr_cross_check for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("utr_cross_check")
+        logger.info("Check utr_cross_check for %s: PASS", settlement_id)
 
     # ── Check 9: Amount cross-check ──
     if bank_credit["amount"] != actual_amount:
         checks_failed.append("amount_cross_check")
+        logger.info("Check amount_cross_check for %s: FAIL", settlement_id)
         return _make_exception(settlement_id, actual_amount, expected_amount, difference, checks_passed, checks_failed)
     else:
         checks_passed.append("amount_cross_check")
+        logger.info("Check amount_cross_check for %s: PASS", settlement_id)
 
     # ── Check 10 & 11: Expected amount and difference ──
     # Expected amount and difference are pre-computed at the top of this function
     # so they are always visible even when earlier checks fail (DETERMINISTIC_EXCEPTION).
     checks_passed.append("expected_amount_calculation")
+    logger.info("Check expected_amount_calculation for %s: PASS", settlement_id)
     checks_passed.append("difference_calculation")
+    logger.info("Check difference_calculation for %s: PASS", settlement_id)
 
     # ── Check 12: Adjustment consistency ──
     # If the settlement declares an adjustment amount, verify it accounts for
@@ -277,6 +299,7 @@ def reconcile_settlement(
         # Adjustment should bridge the gap: actual == expected + adjustment
         if adjustment_amount != difference:
             checks_failed.append("adjustment_consistency")
+            logger.info("Check adjustment_consistency for %s: FAIL", settlement_id)
             return ReconciliationResult(
                 settlement_id=settlement_id,
                 decision=DecisionState.DETERMINISTIC_EXCEPTION,
@@ -289,8 +312,10 @@ def reconcile_settlement(
             )
         else:
             checks_passed.append("adjustment_consistency")
+            logger.info("Check adjustment_consistency for %s: PASS", settlement_id)
     else:
         checks_passed.append("adjustment_consistency")
+        logger.info("Check adjustment_consistency for %s: PASS", settlement_id)
 
     # ── If any check failed → DETERMINISTIC_EXCEPTION ──
     if checks_failed:
@@ -307,6 +332,7 @@ def reconcile_settlement(
 
     # ── Outcome ──
     if difference == 0:
+        logger.info("Final decision for %s: %s", settlement_id, DecisionState.CLEAN_MATCH.value)
         return ReconciliationResult(
             settlement_id=settlement_id,
             decision=DecisionState.CLEAN_MATCH,
@@ -318,6 +344,7 @@ def reconcile_settlement(
             escalate_to_human=False,
         )
     else:
+        logger.info("Final decision for %s: %s", settlement_id, DecisionState.MATH_DISCREPANCY.value)
         return ReconciliationResult(
             settlement_id=settlement_id,
             decision=DecisionState.MATH_DISCREPANCY,
@@ -394,7 +421,8 @@ def run_engine(
                 linked_bank_utr=linked_bank_utr,
             )
             results.append(result)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Settlement %s marked UNPROCESSED: %s", settlement["settlement_id"], exc, exc_info=True)
             results.append(ReconciliationResult(
                 settlement_id=settlement["settlement_id"],
                 decision=DecisionState.UNPROCESSED,
@@ -532,6 +560,7 @@ def run_engine(
                         cross_settlement=cross_ctx,
                     )
 
+                    logger.info("Invoking exception analysis for %s", result.settlement_id)
                     ai_result = investigate(evidence, llm_client=effective_llm_client)
                     if ai_result.ai_response is not None:
                         result.ai_response = ai_result.ai_response
@@ -542,7 +571,14 @@ def run_engine(
                         # LLM failed → UNRESOLVED, keep deterministic result otherwise
                         result.decision = DecisionState.UNRESOLVED
                         result.escalate_to_human = True
-                except Exception:
-                    pass  # AI failure → human review (safety invariant)
+                except Exception as exc:
+                    logger.warning(
+                        "AI investigation failed for settlement %s: %s",
+                        result.settlement_id,
+                        exc,
+                        exc_info=True,
+                    )
+                    result.decision = DecisionState.UNRESOLVED
+                    result.escalate_to_human = True
 
     return results
