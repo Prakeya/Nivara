@@ -1,4 +1,4 @@
-# LEDGERMIND Architecture
+# Nivara Architecture
 
 **Version:** 1.3 (Frozen)  
 **Track:** Razorpay Buildathon Track 04 — AI Finance Controller  
@@ -484,7 +484,7 @@ dataset = generate_batch(
 ## File Structure
 
 ```
-ledgermind/
+nivara/
 ├── backend/
 │   ├── main.py                  # FastAPI app, endpoints
 │   ├── models.py                # All Pydantic models
@@ -625,7 +625,7 @@ Difference             ₹1,775    ← Calculated by: Deterministic Engine ✓
 
 ### Safety Guarantees Panel
 
-**LedgerMind Guarantees**
+**Nivara Guarantees**
 - ✓ AI never calculates money
 - ✓ AI never modifies financial records
 - ✓ AI never auto-approves
