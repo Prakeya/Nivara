@@ -161,6 +161,7 @@ function ReconciliationTrace({ result, onBack, onReview }) {
 /* ── App ── */
 function App() {
   const [view, setView] = useState("upload");
+  const [prevView, setPrevView] = useState("dashboard");
   const [jobId, setJobId] = useState(null);
   const [status, setStatus] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -321,17 +322,17 @@ function App() {
             <ResultsTable
               results={status.results}
               selectedId={selected?.settlement_id}
-              onSelect={(r) => { setSelected(r); setView("trace"); }}
+              onSelect={(r) => { setSelected(r); setPrevView("dashboard"); setView("trace"); }}
             />
           </>
         )}
 
         {view === "trace" && (
-          <ReconciliationTrace result={selected} onBack={() => setView("dashboard")} onReview={handleHumanReview} />
+          <ReconciliationTrace result={selected} onBack={() => setView(prevView)} onReview={handleHumanReview} />
         )}
 
         {view === "queue" && hasData && !loading && (
-          <ReviewQueue results={status.results} onSelect={(r) => { setSelected(r); setView("trace"); }} onReview={handleHumanReview} />
+          <ReviewQueue results={status.results} onSelect={(r) => { setSelected(r); setPrevView("queue"); setView("trace"); }} onReview={handleHumanReview} />
         )}
 
         {view === "patterns" && hasData && !loading && (
