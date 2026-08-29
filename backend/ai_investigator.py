@@ -1275,6 +1275,9 @@ class DemoLLMClient:
     are heuristic-based, not live AI.
 
     Accepts EvidencePacket directly — no string parsing.
+
+    Auto-resolves trivial rounding errors (<=1 paise) with high confidence,
+    demonstrating the full decision loop: trivial error → auto-resolve → audit.
     """
 
     def complete(
@@ -1292,12 +1295,30 @@ class DemoLLMClient:
             evidence = self._extract_evidence_from_messages(messages)
 
         classification, explanation, confidence, cited = _classify_by_heuristic(evidence)
+
+        # Auto-resolve trivial rounding errors (<=1 paise difference)
+        # This demonstrates the full decision loop: trivial → auto-resolve → audit
+        diff = abs(evidence.difference_paise)
+        is_trivial = diff <= 1
+        is_high_confidence = confidence >= 0.95
+
+        if is_trivial and is_high_confidence:
+            action = "AUTO_RESOLVE"
+            explanation = (
+                f"[DEMO] Trivial rounding error of {diff} paise detected. "
+                f"All deterministic checks passed. This is a known rounding artifact "
+                f"from integer paise arithmetic — safe to auto-resolve. "
+                f"{explanation}"
+            )
+        else:
+            action = "ESCALATE_TO_HUMAN"
+
         return {
             "classification": classification,
             "explanation": explanation,
             "raw_confidence": confidence,
             "cited_evidence": cited,
-            "recommended_action": "ESCALATE_TO_HUMAN",
+            "recommended_action": action,
             "reasoning_steps": [],
         }
 

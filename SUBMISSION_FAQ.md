@@ -148,5 +148,5 @@ Neither of these affect the core reconciliation logic or safety guarantees — t
 | False accept rate | 12.5% (10 blind spots, disclosed) |
 | Per-class macro F1 | 0.82 |
 | Throughput | ~36,000 in-memory reconciliations/sec (no I/O) |
-| Tests | 411 passing |
+| Tests | 482 passing |
 | Demo mode | Works without API key (heuristic, clearly labeled) |

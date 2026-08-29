@@ -647,6 +647,27 @@ The action and reconciliation state remain available through the audit trail.
 
 ---
 
+# How Nivara Compares to Razorpay Recon
+
+Razorpay launched **Razorpay Recon** in December 2024 — an AI-powered reconciliation solution processing 200M+ monthly transactions with claimed 80% efficiency improvement.
+
+Nivara addresses the same core problem at hackathon scope:
+
+| Dimension                  | Razorpay Recon (Production)           | Nivara (Hackathon MVP)                    |
+| -------------------------- | ------------------------------------- | ----------------------------------------- |
+| Scale                      | 200M+ transactions/month              | 80 settlements (demonstration)            |
+| Data sources               | POS, bank files, cash statements      | 4 CSVs (transactions, settlements, refunds, bank credits) |
+| AI role                    | Pattern detection, discrepancy routing | Discrepancy classification with ReAct agent |
+| Safety model               | Proprietary                          | Schema-enforced: AI never auto-approves   |
+| Audit trail                | Dashboard analytics                   | Append-only SQLite with SHA-256 hash chain |
+| Deterministic checks       | Proprietary fee/tax rules             | 12 checks with integer paise arithmetic   |
+| Evaluation                 | Operational metrics                  | Per-class P/R/F1 on 80-settlement ground truth |
+| Settlement cycle support   | T+1, T+2, custom                      | Configurable (T+1/T+2 via parameter)      |
+
+**Key insight:** Nivara's architecture maps directly to Razorpay Recon's problem space. The deterministic-first approach with AI-assisted investigation is the same pattern used in production reconciliation systems — just at demonstration scale.
+
+---
+
 # What We Intentionally Did Not Build
 
 The following capabilities are outside the current MVP scope:

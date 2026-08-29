@@ -381,6 +381,7 @@ def run_engine(
     bank_credits: list[dict],
     llm_client=None,
     max_workers: int = 4,
+    settlement_cycle_days: int = 2,
 ) -> list[ReconciliationResult]:
     """
     Run deterministic reconciliation for a batch of settlements.
@@ -396,6 +397,8 @@ def run_engine(
             DemoLLMClient (deterministic heuristic classifier). In production,
             pass OpenAIClient; in tests, pass MockLLMClient.
         max_workers: Number of parallel workers for settlement reconciliation.
+        settlement_cycle_days: Expected settlement cycle in days (default 2 for T+2).
+            Use 1 for T+1 settlements.
     """
     from backend.linking import link_entities
 
@@ -570,7 +573,7 @@ def run_engine(
                             settlement_created_at=datetime.fromisoformat(settlement["created_at"]) if isinstance(settlement.get("created_at"), str) else datetime.now(),
                             settled_at=datetime.fromisoformat(settlement["settled_at"]) if isinstance(settlement.get("settled_at"), str) else datetime.now(),
                             bank_credited_at=datetime.combine(_parse_date(bank_credit["date"]), datetime.min.time()) if bank_credit and "date" in bank_credit else datetime.now(),
-                            expected_cycle_days=2,
+                            expected_cycle_days=settlement_cycle_days,
                         ),
                         deterministic_checks_passed=result.deterministic_checks_passed,
                         deterministic_checks_failed=result.deterministic_checks_failed,

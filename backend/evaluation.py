@@ -40,6 +40,7 @@ EXCEPTION_LABELS = {
     "timing_race",
     "partial_settlement",
     "unexplained",
+    "duplicate_detection",
 }
 
 # Labels where the engine's blind spot makes a false negative expected

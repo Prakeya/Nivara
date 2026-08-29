@@ -55,6 +55,7 @@ class TestLabelTaxonomy:
             "missing_reference", "bank_mismatch",
             "fee_mismatch", "tax_inconsistency", "refund_timing", "unexplained",
             "adjustment_entry", "refund_after_settlement", "timing_race", "partial_settlement",
+            "duplicate_detection",
         }
         assert EXCEPTION_LABELS == expected
 
