@@ -28,15 +28,15 @@ function HeroMetrics({ status }) {
         </div>
         <div className="metric">
           <div className="value" style={{color: 'var(--green)'}}>{status.ai_auto_approved}</div>
-          <div className="label">AI Auto-Approved</div>
+          <div className="label">Auto-Approved</div>
         </div>
         <div className="metric blue">
           <div className="value">{status.ai_investigations}</div>
-          <div className="label">AI Investigations ({aiRate}%)</div>
+          <div className="label">LLM Investigations ({aiRate}%)</div>
         </div>
       </div>
       <div className="metric-footer">
-        Match rate: {matchRate}% &nbsp;&bull;&nbsp; AI investigates. Humans decide.
+        Match rate: {matchRate}% &nbsp;&bull;&nbsp; LLM classifies exceptions. Humans decide.
         {status.ai_mode === "demo" && <span style={{marginLeft: 8, color: '#92400e', fontWeight: 600}}>DETERMINISTIC DEMO — heuristic classifications. Set OPENAI_API_KEY for live LLM.</span>}
       </div>
     </div>

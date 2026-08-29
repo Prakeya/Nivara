@@ -33,6 +33,9 @@ class DecisionState(str, Enum):
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     UNRESOLVED = "UNRESOLVED"
     UNPROCESSED = "UNPROCESSED"
+    AUTO_RESOLVED = "AUTO_RESOLVED"
+    RESOLVED_BY_HUMAN = "RESOLVED_BY_HUMAN"
+    REJECTED = "REJECTED"
 
 
 class AIClassification(str, Enum):
@@ -43,6 +46,29 @@ class AIClassification(str, Enum):
 
 class AIRecommendedAction(str, Enum):
     ESCALATE_TO_HUMAN = "ESCALATE_TO_HUMAN"
+    AUTO_RESOLVE = "AUTO_RESOLVE"
+
+
+class ConfidenceTier(str, Enum):
+    TIER_1 = "TIER_1"  # 0.95-1.0: eligible for auto-resolve
+    TIER_2 = "TIER_2"  # 0.80-0.94: escalate with full evidence
+    TIER_3 = "TIER_3"  # <0.80: escalate with INSUFFICIENT_EVIDENCE
+
+
+class AgentActionType(str, Enum):
+    THOUGHT = "THOUGHT"
+    TOOL_CALL = "TOOL_CALL"
+    TOOL_RESULT = "TOOL_RESULT"
+    DECISION = "DECISION"
+
+
+class ResolutionStatus(str, Enum):
+    OPEN = "OPEN"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    CLOSED = "CLOSED"
+    AUTO_CLOSED = "AUTO_CLOSED"
+    HUMAN_CLOSED = "HUMAN_CLOSED"
+    REJECTED = "REJECTED"
 
 
 class ValidationResult(str, Enum):
@@ -288,10 +314,17 @@ class ReconciliationResult(BaseModel):
     expected_amount_paise: int
     actual_amount_paise: int = Field(gt=0)
     ai_response: Optional[AIResponse] = None
+    agent_response: Optional[AgentResponse] = None
     deterministic_checks_passed: list[str]
     deterministic_checks_failed: list[str]
     escalate_to_human: bool
     ai_mode: Optional[str] = None
+    resolution_status: ResolutionStatus = ResolutionStatus.OPEN
+    resolution_confidence: Optional[float] = None
+    resolution_source: Optional[str] = None  # "deterministic" | "agent" | "human"
+    auto_approved_by_ai: int = Field(default=0, ge=0, le=0)
+    agent_iterations: int = Field(default=0, ge=0)
+    agent_tool_calls: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_difference_consistency(self) -> "ReconciliationResult":
@@ -325,6 +358,10 @@ class BatchMetrics(BaseModel):
     auto_approved_by_ai: int = Field(ge=0, le=0)
     ai_investigations: int = Field(ge=0)
     ai_invocation_rate: float = Field(ge=0.0, le=1.0)
+    auto_resolved: int = Field(ge=0, default=0)
+    human_reviewed: int = Field(ge=0, default=0)
+    pending_review: int = Field(ge=0, default=0)
+    loop_closure_rate: float = Field(ge=0.0, le=1.0, default=0.0)
 
 
 class EvaluationResult(BaseModel):
@@ -340,3 +377,114 @@ class EvaluationResult(BaseModel):
     ai_invocation_rate: float = Field(ge=0.0, le=1.0)
     ai_auto_approval_rate_pct: float = Field(ge=0.0, le=0.0)
     processing_time_per_settlement: float = Field(ge=0.0)
+
+
+# ---------------------------------------------------------------------------
+# Agentic models
+# ---------------------------------------------------------------------------
+
+class ReasoningStep(BaseModel):
+    """A single step in the agent's reasoning chain."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    step_number: int = Field(ge=1)
+    action_type: AgentActionType
+    thought: str
+    tool_name: Optional[str] = None
+    tool_args: Optional[dict] = None
+    tool_result: Optional[str] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now())
+
+
+class AgentTrace(BaseModel):
+    """Full reasoning trace for an agent investigation."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    settlement_id: str
+    steps: list[ReasoningStep] = Field(default_factory=list)
+    final_classification: Optional[AIClassification] = None
+    final_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
+    confidence_tier: ConfidenceTier = ConfidenceTier.TIER_3
+    iteration_count: int = Field(ge=0, default=0)
+    self_corrections: int = Field(ge=0, default=0)
+
+
+class ToolCall(BaseModel):
+    """A tool call requested by the agent."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    tool_name: str
+    tool_args: dict = Field(default_factory=dict)
+    call_id: str = Field(default_factory=lambda: str(uuid4()))
+
+
+class ToolResult(BaseModel):
+    """Result returned by an agent tool."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    call_id: str
+    tool_name: str
+    result: dict = Field(default_factory=dict)
+    success: bool = True
+    error: Optional[str] = None
+
+
+class AgentResponse(BaseModel):
+    """Full agent response including trace and decision."""
+    model_config = ConfigDict(
+        strict=True,
+        frozen=False,
+        validate_assignment=True,
+        extra="forbid",
+    )
+
+    classification: AIClassification
+    explanation: str
+    raw_confidence: float = Field(ge=0.0, le=1.0)
+    cited_evidence: list[str]
+    recommended_action: AIRecommendedAction
+    trace: AgentTrace
+    tool_calls_made: int = Field(ge=0, default=0)
+    reasoning_summary: str = ""
+
+    @field_validator("raw_confidence")
+    @classmethod
+    def validate_confidence_range(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("raw_confidence must be between 0.0 and 1.0")
+        return v
+
+
+class HumanReviewDecision(BaseModel):
+    """A human reviewer's decision on a settlement."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    settlement_id: str
+    decision: str  # "APPROVE" | "REJECT" | "MODIFY"
+    reason: str
+    reviewer_id: str
+    modifications: Optional[dict] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now())
+
+
+class LoopClosureMetrics(BaseModel):
+    """Metrics for loop closure tracking."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    total_settlements: int = Field(ge=0)
+    closed_by_ai: int = Field(ge=0)
+    closed_by_human: int = Field(ge=0)
+    pending_review: int = Field(ge=0)
+    rejected: int = Field(ge=0)
+    loop_closure_rate: float = Field(ge=0.0, le=1.0)
+    auto_resolution_rate: float = Field(ge=0.0, le=1.0)
+    avg_time_to_close_seconds: float = Field(ge=0.0)
+
+
+class AgentToolDefinition(BaseModel):
+    """Definition of a tool available to the agent."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    name: str
+    description: str
+    parameters: dict = Field(default_factory=dict)

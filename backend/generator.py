@@ -738,6 +738,158 @@ def _gen_partial_settlement(
     return settlement, transactions, [], [bank_credit], gt
 
 
+def _gen_near_miss_amount(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Near-miss: settlement amount off by 1 paise. Triggers MATH_DISCREPANCY."""
+    sid = f"SETL_{idx:04d}"
+    pid = f"PAY_{idx:04d}_00"
+    amount = 100000
+    method = "upi"
+    created_at = _ts(base_date, rng, 24)
+    t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+    expected = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
+    actual = expected - 1  # off by 1 paise
+    if actual <= 0:
+        actual = expected + 1
+    utr = f"UTR_{idx:04d}"
+    s_created = _ts(base_date, rng, 12)
+    s_settled = s_created + timedelta(hours=12)
+    settlement = _make_settlement(sid, actual, utr, s_created, s_settled, [pid], [])
+    bank_credit = _make_bank_credit(utr, actual, s_settled.date())
+    gt = {
+        "settlement_id": sid,
+        "label": "near_miss_amount",
+        "expected_amount_paise": expected,
+        "actual_amount_paise": actual,
+        "difference_paise": actual - expected,
+    }
+    return settlement, [t], [], [bank_credit], gt
+
+
+def _gen_off_by_one_date(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Off-by-one date: settled at 23:59:59, bank credited next day 00:00:01. Still clean."""
+    sid = f"SETL_{idx:04d}"
+    pid = f"PAY_{idx:04d}_00"
+    amount = _random_amount(rng)
+    method = _random_method(rng)
+    created_at = datetime(2026, 8, 15, 10, 0, 0)
+    t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+    expected = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
+    utr = f"UTR_{idx:04d}"
+    s_created = datetime(2026, 8, 15, 8, 0, 0)
+    s_settled = datetime(2026, 8, 15, 23, 59, 59)
+    settlement = _make_settlement(sid, expected, utr, s_created, s_settled, [pid], [])
+    # Bank credited next day 00:00:01 — within 2-day window, should still link
+    bank_credit = _make_bank_credit(utr, expected, date(2026, 8, 16))
+    # Override the bank credit date to be next day
+    gt = {
+        "settlement_id": sid,
+        "label": "off_by_one_date",
+        "expected_amount_paise": expected,
+        "actual_amount_paise": expected,
+        "difference_paise": 0,
+    }
+    return settlement, [t], [], [bank_credit], gt
+
+
+def _gen_duplicate_utr(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Duplicate UTR: shares UTR_0001 with first clean_match. Triggers duplicate_detection."""
+    sid = f"SETL_{idx:04d}"
+    pid = f"PAY_{idx:04d}_00"
+    amount = _random_amount(rng)
+    method = _random_method(rng)
+    created_at = _ts(base_date, rng, 24)
+    t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+    expected = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
+    utr = "UTR_0001"  # duplicate of first clean_match
+    s_created = _ts(base_date, rng, 12)
+    s_settled = s_created + timedelta(hours=12)
+    settlement = _make_settlement(sid, expected, utr, s_created, s_settled, [pid], [])
+    bank_credit = _make_bank_credit(utr, expected, s_settled.date())
+    gt = {
+        "settlement_id": sid,
+        "label": "duplicate_utr",
+        "expected_amount_paise": expected,
+        "actual_amount_paise": expected,
+        "difference_paise": 0,
+    }
+    return settlement, [t], [], [bank_credit], gt
+
+
+def _gen_missing_optional_field(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Missing optional field: empty linked_refund_ids, all else valid. Should be clean."""
+    sid = f"SETL_{idx:04d}"
+    pid = f"PAY_{idx:04d}_00"
+    amount = _random_amount(rng)
+    method = _random_method(rng)
+    created_at = _ts(base_date, rng, 24)
+    t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
+    expected = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
+    utr = f"UTR_{idx:04d}"
+    s_created = _ts(base_date, rng, 12)
+    s_settled = s_created + timedelta(hours=12)
+    settlement = _make_settlement(sid, expected, utr, s_created, s_settled, [pid], [])
+    bank_credit = _make_bank_credit(utr, expected, s_settled.date())
+    gt = {
+        "settlement_id": sid,
+        "label": "missing_optional_field",
+        "expected_amount_paise": expected,
+        "actual_amount_paise": expected,
+        "difference_paise": 0,
+    }
+    return settlement, [t], [], [bank_credit], gt
+
+
+def _gen_fee_off_by_one(
+    idx: int,
+    rng: random.Random,
+    base_date: datetime,
+) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+    """Fee off by 1 paise: payment fee = expected_fee + 1. Triggers fee_validation."""
+    sid = f"SETL_{idx:04d}"
+    pid = f"PAY_{idx:04d}_00"
+    amount = 100000
+    method = "card"
+    created_at = _ts(base_date, rng, 24)
+    correct_fee = compute_fee(method, amount)
+    wrong_fee = correct_fee + 1
+    correct_tax = compute_tax(wrong_fee)
+    t = _make_transaction(pid, amount, method, created_at, settlement_id=sid, fee_override=wrong_fee, tax_override=correct_tax)
+    # Settlement amount computed from actual (wrong) fee
+    expected_wrong = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
+    # Ground truth expected uses correct fee
+    correct_linked = [{"amount": amount, "fee": correct_fee, "tax": compute_tax(correct_fee)}]
+    gt_expected = _settlement_amount(correct_linked, [])
+    utr = f"UTR_{idx:04d}"
+    s_created = _ts(base_date, rng, 12)
+    s_settled = s_created + timedelta(hours=12)
+    settlement = _make_settlement(sid, expected_wrong, utr, s_created, s_settled, [pid], [])
+    bank_credit = _make_bank_credit(utr, expected_wrong, s_settled.date())
+    gt = {
+        "settlement_id": sid,
+        "label": "fee_off_by_one",
+        "expected_amount_paise": gt_expected,
+        "actual_amount_paise": expected_wrong,
+        "difference_paise": expected_wrong - gt_expected,
+    }
+    return settlement, [t], [], [bank_credit], gt
+
+
 def _gen_unexplained(
     idx: int,
     rng: random.Random,

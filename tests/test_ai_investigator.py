@@ -127,18 +127,18 @@ def _make_evidence_packet(
 
 class TestConfidenceTier:
     def test_high_tier(self):
-        assert compute_confidence_tier(0.7) == "HIGH"
-        assert compute_confidence_tier(0.9) == "HIGH"
-        assert compute_confidence_tier(1.0) == "HIGH"
+        assert compute_confidence_tier(0.7) == "TIER_3"
+        assert compute_confidence_tier(0.9) == "TIER_2"
+        assert compute_confidence_tier(1.0) == "TIER_1"
 
     def test_medium_tier(self):
-        assert compute_confidence_tier(0.4) == "MEDIUM"
-        assert compute_confidence_tier(0.6) == "MEDIUM"
+        assert compute_confidence_tier(0.4) == "TIER_3"
+        assert compute_confidence_tier(0.6) == "TIER_3"
 
     def test_low_tier(self):
-        assert compute_confidence_tier(0.0) == "LOW"
-        assert compute_confidence_tier(0.3) == "LOW"
-        assert compute_confidence_tier(0.39) == "LOW"
+        assert compute_confidence_tier(0.0) == "TIER_3"
+        assert compute_confidence_tier(0.3) == "TIER_3"
+        assert compute_confidence_tier(0.39) == "TIER_3"
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +244,7 @@ class TestValidClassification:
         result = investigate(ep, llm_client=client)
         assert result.decision == DecisionState.REVIEW_REQUIRED
         assert result.ai_response.classification == AIClassification.TIMING_MISMATCH
-        assert result.confidence_tier == "HIGH"
+        assert result.confidence_tier == "TIER_2"
         assert result.escalate_to_human is True
 
     def test_refund_timing(self):
@@ -258,7 +258,7 @@ class TestValidClassification:
         result = investigate(ep, llm_client=client)
         assert result.decision == DecisionState.REVIEW_REQUIRED
         assert result.ai_response.classification == AIClassification.REFUND_TIMING
-        assert result.confidence_tier == "MEDIUM"
+        assert result.confidence_tier == "TIER_3"
 
     def test_unexplained(self):
         ep = _make_evidence_packet()
@@ -271,7 +271,7 @@ class TestValidClassification:
         result = investigate(ep, llm_client=client)
         assert result.decision == DecisionState.REVIEW_REQUIRED
         assert result.ai_response.classification == AIClassification.UNEXPLAINED
-        assert result.confidence_tier == "LOW"
+        assert result.confidence_tier == "TIER_3"
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +372,7 @@ class TestResponseValidation:
         # Confidence is clamped to [0.0, 1.0] per architecture spec
         assert result.decision == DecisionState.REVIEW_REQUIRED
         assert result.ai_response.raw_confidence == 1.0
-        assert result.confidence_tier == "HIGH"
+        assert result.confidence_tier == "TIER_1"
 
 
 # ---------------------------------------------------------------------------

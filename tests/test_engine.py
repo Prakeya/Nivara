@@ -955,3 +955,106 @@ class TestAIInvestigationExceptionFallback:
                 run_engine([t], [s], [], [bc])
 
         assert any("AI investigation failed" in rec.message for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Fuzzy edge case tests
+# ---------------------------------------------------------------------------
+
+class TestFuzzyEdgeCases:
+    def test_near_miss_amount_triggers_math_discrepancy(self):
+        """Near-miss amount (off by 1 paise) should trigger MATH_DISCREPANCY."""
+        t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        expected = 100000 - 0 - 0 - 0  # 100000
+        actual = expected - 1  # 99999 (off by 1 paise)
+        s = _settlement("SETL_001", amount=actual, linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", actual)
+
+        result = reconcile_settlement(
+            settlement=s,
+            linked_payments=[t],
+            linked_refunds=[],
+            bank_credit=bc,
+            linkage_errors=[],
+            duplicate_errors=[],
+        )
+
+        assert result.decision == DecisionState.MATH_DISCREPANCY
+        assert result.difference_paise == -1
+        assert len(result.deterministic_checks_failed) == 0
+
+    def test_duplicate_utr_triggers_exception(self):
+        """Two settlements sharing UTR with different amounts should trigger DUPLICATE_UTR."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        t2 = _txn("PAY_002", amount=80000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR-DUPE-001", linked_pids=["PAY_001"])
+        s2 = _settlement("SETL_002", amount=80000, utr="UTR-DUPE-001", linked_pids=["PAY_002"])
+        bc1 = _bank_credit("UTR-DUPE-001", 100000)
+        bc2 = _bank_credit("UTR-DUPE-001", 80000)
+
+        results = run_engine([t1, t2], [s1, s2], [], [bc1, bc2])
+
+        for r in results:
+            assert r.decision != DecisionState.CLEAN_MATCH, (
+                f"Settlement {r.settlement_id} must not be CLEAN_MATCH with duplicate UTR"
+            )
+
+    def test_fee_off_by_one_triggers_exception(self):
+        """Fee off by 1 paise should trigger DETERMINISTIC_EXCEPTION (fee_validation)."""
+        fee_correct = compute_fee(PaymentMethod.CARD, 100000)  # 2100
+        wrong_fee = fee_correct + 1  # 2101
+        correct_tax = compute_tax(wrong_fee)
+        t = _txn("PAY_001", amount=100000, method="card", fee=wrong_fee, tax=correct_tax)
+        s = _settlement("SETL_001", amount=100000, linked_pids=["PAY_001"])
+        bc = _bank_credit("UTR_001", 100000)
+
+        result = reconcile_settlement(
+            settlement=s,
+            linked_payments=[t],
+            linked_refunds=[],
+            bank_credit=bc,
+            linkage_errors=[],
+            duplicate_errors=[],
+        )
+
+        assert result.decision == DecisionState.DETERMINISTIC_EXCEPTION
+        assert "fee_validation" in result.deterministic_checks_failed
+        assert result.escalate_to_human is True
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Parallel processing test
+# ---------------------------------------------------------------------------
+
+class TestParallelExecution:
+    def test_parallel_execution_matches_sequential(self):
+        """Parallel processing must produce identical results to sequential."""
+        fee = compute_fee(PaymentMethod.CARD, 100000)
+        tax = compute_tax(fee)
+        expected = 100000 - fee - tax
+
+        t1 = _txn("PAY_001", amount=100000, method="card", fee=fee, tax=tax)
+        t2 = _txn("PAY_002", amount=50000, method="upi", fee=0, tax=0)
+        t3 = _txn("PAY_003", amount=80000, method="netbanking",
+                  fee=compute_fee(PaymentMethod.NETBANKING, 80000),
+                  tax=compute_tax(compute_fee(PaymentMethod.NETBANKING, 80000)))
+        s1 = _settlement("SETL_001", amount=expected, linked_pids=["PAY_001"])
+        s2 = _settlement("SETL_002", amount=50000, utr="UTR_002", linked_pids=["PAY_002"])
+        s3 = _settlement("SETL_003", amount=100000, utr="UTR_003", linked_pids=["PAY_003"])
+        bc1 = _bank_credit("UTR_001", expected)
+        bc2 = _bank_credit("UTR_002", 50000)
+        bc3 = _bank_credit("UTR_003", 100000)
+
+        sequential = [run_engine([t1, t2, t3], [s1, s2, s3], [], [bc1, bc2, bc3])]
+        # Run sequential again to compare
+        seq_result = run_engine([t1, t2, t3], [s1, s2, s3], [], [bc1, bc2, bc3])
+        par_result = run_engine([t1, t2, t3], [s1, s2, s3], [], [bc1, bc2, bc3], max_workers=4)
+
+        seq_sorted = sorted(seq_result, key=lambda r: r.settlement_id)
+        par_sorted = sorted(par_result, key=lambda r: r.settlement_id)
+
+        for s, p in zip(seq_sorted, par_sorted):
+            assert s.settlement_id == p.settlement_id
+            assert s.decision == p.decision
+            assert s.escalate_to_human == p.escalate_to_human
+            assert s.difference_paise == p.difference_paise

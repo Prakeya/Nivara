@@ -4,17 +4,17 @@ Prepared answers to likely judge-attack questions for Razorpay Buildathon 2026, 
 
 ---
 
-## 1. "Why do you need AI at all? Couldn't this all be deterministic?"
+## 1. "Why do you need an LLM at all? Couldn't this all be deterministic?"
 
 **The 11 deterministic checks catch what can be mathematically proven.** References, fees, taxes, bank credits, UTRs, amounts — these are all verifiable with integer arithmetic. No LLM needed.
 
-**AI handles what requires reasoning, not calculation:**
+**The LLM provides natural language classification of exception patterns to reduce human review time. It does not approve transactions.**
 
-- A `MATH_DISCREPANCY` where all deterministic checks pass but the difference is non-zero. The engine cannot determine *why* — it could be refund timing, a delayed bank credit, or something genuinely unexplained. An LLM reviews the evidence packet and classifies the discrepancy.
-- A `TIMING_MISMATCH` where the bank credit arrived late. The deterministic engine detects the amount difference but cannot determine if it's a bank processing delay or an actual error. The AI classifies it based on the timing evidence.
-- An `UNEXPLAINED` case where no clear cause exists. The AI's job is to say "I don't know either" — which is the honest, safe behavior.
+- A `MATH_DISCREPANCY` where all deterministic checks pass but the difference is non-zero. The engine cannot determine *why* — it could be refund timing, a delayed bank credit, or something genuinely unexplained. An LLM classifies the discrepancy based on the evidence packet.
+- A `TIMING_MISMATCH` where the bank credit arrived late. The deterministic engine detects the amount difference but cannot determine if it's a bank processing delay or an actual error. The LLM classifies it based on the timing evidence.
+- An `UNEXPLAINED` case where no clear cause exists. The LLM's job is to say "I don't know either" — which is the honest, safe behavior.
 
-**The key insight:** Deterministic checks tell you *that* something is wrong. AI helps understand *why*. Humans decide what to do about it.
+**The key insight:** Deterministic checks tell you *that* something is wrong. The LLM helps understand *why*. Humans decide what to do about it.
 
 ---
 
@@ -26,9 +26,9 @@ An LLM wrapper sends raw data to a model and trusts its output. Nivara does the 
 |---|---|
 | Sends raw CSV to the LLM | Sends structured evidence packets |
 | LLM calculates financial values | Python performs all calculations |
-| AI decides if money matches | Deterministic engine proves correctness |
-| AI can approve transactions | AI always escalates to human |
-| AI explanations are unverifiable | AI citations are validated against the evidence packet |
+| LLM decides if money matches | Deterministic engine proves correctness |
+| LLM can approve transactions | LLM always escalates to human |
+| LLM explanations are unverifiable | LLM citations are validated against the evidence packet |
 | No ground truth evaluation | 80-settlement evaluation dataset with known labels |
 | No safety guarantees | 12 deterministic checks, schema-enforced boundaries |
 
@@ -38,15 +38,15 @@ An LLM wrapper sends raw data to a model and trusts its output. Nivara does the 
 
 ## 3. "What happens at 1M records?"
 
-The deterministic engine processes ~36,000 settlements/second in the current evaluation. At that rate:
+The deterministic engine processes ~36,000 in-memory reconciliations/second (pure computation, no I/O). End-to-end throughput with CSV parsing and SQLite writes will be lower. At that rate:
 
 - **1M records:** ~28 seconds for deterministic reconciliation
-- **AI investigation:** Only applies to MATH_DISCREPANCY cases (~20-30% of settlements in typical data). With a real LLM, each investigation takes ~1-2 seconds.
-- **Total for 1M records:** ~28 seconds deterministic + ~300 seconds AI (if all 300K need investigation) = ~5.5 minutes
+- **LLM investigation:** Only applies to MATH_DISCREPANCY cases (~20-30% of settlements in typical data). With a real LLM, each investigation takes ~1-2 seconds.
+- **Total for 1M records:** ~28 seconds deterministic + ~300 seconds LLM (if all 300K need investigation) = ~5.5 minutes
 
 **Production scaling path:**
 - Parallel processing (settlements are independent)
-- Async queue for AI investigations
+- Async queue for LLM investigations
 - Batch LLM calls (multiple settlements per prompt)
 - Persistent job store (Redis/SQS instead of in-memory)
 
@@ -74,7 +74,7 @@ We don't claim it is. The README explicitly states:
 
 **Zero. By design. Enforced by schema.**
 
-The `AIResponse` model has `extra="forbid"` — the LLM cannot inject any fields. The only `recommended_action` is `ESCALATE_TO_HUMAN`. The AI classifies; humans decide.
+The `AIResponse` model has `extra="forbid"` — the LLM cannot inject any fields. The only `recommended_action` is `ESCALATE_TO_HUMAN`. The LLM classifies; humans decide.
 
 This is not a policy choice — it's a technical constraint. Even if someone modified the LLM prompt to say "approve this," the Pydantic schema would reject the response.
 
@@ -84,7 +84,7 @@ This is not a policy choice — it's a technical constraint. Even if someone mod
 
 **`validate_citations()` rejects hallucinated evidence.**
 
-Every AI response must cite evidence from the packet. The validation function checks that all cited IDs exist in the evidence packet. If the LLM invents a reference (e.g., cites "payment_999" which doesn't exist), the response is rejected and the case becomes UNRESOLVED.
+Every LLM response must cite evidence from the packet. The validation function checks that all cited IDs exist in the evidence packet. If the LLM invents a reference (e.g., cites "payment_999" which doesn't exist), the response is rejected and the case becomes UNRESOLVED.
 
 This is tested: the test suite includes hallucinated evidence rejection tests.
 
@@ -118,9 +118,9 @@ When the server restarts:
 The mock mode is **clearly labeled everywhere**:
 - UI shows "MOCK MODE" badge in amber/yellow
 - Hero metrics footer shows "MOCK MODE — heuristic classifications, not live AI"
-- AI investigation section header says "Demo Classification (Heuristic)"
+- LLM investigation section header says "Demo Classification (Heuristic)"
 - Review queue shows "MOCK" badge next to each mock-classified settlement
-- AI response explanations are prefixed with "[DEMO]"
+- LLM response explanations are prefixed with "[DEMO]"
 
 **The goal:** A live demo that shows the full pipeline end-to-end without requiring judges to supply their own API key, while making it unambiguous that outputs are heuristic-based.
 
@@ -141,12 +141,12 @@ Neither of these affect the core reconciliation logic or safety guarantees — t
 | Metric | Value |
 |---|---|
 | Deterministic checks | 12 (was 11, +adjustment consistency) |
-| AI classifications | 3 (TIMING_MISMATCH, REFUND_TIMING, UNEXPLAINED) |
+| LLM classifications | 3 (TIMING_MISMATCH, REFUND_TIMING, UNEXPLAINED) |
 | AI auto-approval rate | 0% (enforced by schema) |
 | Evaluation settlements | 80 |
 | Match rate | 87.5% |
 | False accept rate | 12.5% (10 blind spots, disclosed) |
 | Per-class macro F1 | 0.82 |
-| Throughput | ~36,000 settlements/sec |
+| Throughput | ~36,000 in-memory reconciliations/sec (no I/O) |
 | Tests | 411 passing |
 | Demo mode | Works without API key (heuristic, clearly labeled) |

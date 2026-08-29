@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from backend.models import DecisionState, ReconciliationResult
+from backend.models import DecisionState, ReconciliationResult, HumanReviewDecision
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +288,50 @@ class AuditLogger:
         )
         return cursor.fetchone()[0]
 
+    def log_human_review(
+        self,
+        settlement_id: str,
+        review: HumanReviewDecision,
+    ) -> AuditRecord:
+        """Log a human review decision as an audit record.
+
+        Uses upload_hash = 'human_review' to distinguish from batch uploads.
+        """
+        record_id = str(uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        payload: dict[str, Any] = {
+            "settlement_id": review.settlement_id,
+            "decision_state": "RESOLVED_BY_HUMAN" if review.decision != "REJECT" else "REJECTED",
+            "human_review": {
+                "decision": review.decision,
+                "reason": review.reason,
+                "reviewer_id": review.reviewer_id,
+                "timestamp": review.timestamp.isoformat(),
+            },
+        }
+
+        payload_json = json.dumps(payload, default=str)
+
+        record = AuditRecord(
+            id=record_id,
+            upload_hash="human_review",
+            settlement_id=settlement_id,
+            timestamp=timestamp,
+            decision_state=payload["decision_state"],
+            payload_json=payload_json,
+        )
+
+        self._conn.execute(
+            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (record.id, record.upload_hash, record.settlement_id,
+             record.timestamp, record.decision_state, record.payload_json),
+        )
+        self._conn.commit()
+
+        return record
+
 
 # ---------------------------------------------------------------------------
 # Convenience: in-memory audit (for testing)
@@ -370,3 +414,37 @@ class InMemoryAuditLogger:
 
     def total_records(self, upload_hash: str) -> int:
         return len(self.get_batch(upload_hash))
+
+    def log_human_review(
+        self,
+        settlement_id: str,
+        review: HumanReviewDecision,
+    ) -> AuditRecord:
+        """Log a human review decision (in-memory version)."""
+        record_id = str(uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        payload: dict[str, Any] = {
+            "settlement_id": review.settlement_id,
+            "decision_state": "RESOLVED_BY_HUMAN" if review.decision != "REJECT" else "REJECTED",
+            "human_review": {
+                "decision": review.decision,
+                "reason": review.reason,
+                "reviewer_id": review.reviewer_id,
+                "timestamp": review.timestamp.isoformat(),
+            },
+        }
+
+        payload_json = json.dumps(payload, default=str)
+
+        record = AuditRecord(
+            id=record_id,
+            upload_hash="human_review",
+            settlement_id=settlement_id,
+            timestamp=timestamp,
+            decision_state=payload["decision_state"],
+            payload_json=payload_json,
+        )
+
+        self.records.append(record)
+        return record

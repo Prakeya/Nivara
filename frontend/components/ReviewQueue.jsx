@@ -1,4 +1,4 @@
-function ReviewQueue({ results, onSelect }) {
+function ReviewQueue({ results, onSelect, onReview }) {
   const queue = results.filter(r => r.escalate_to_human);
 
   const badgeClass = (state) => {
@@ -11,7 +11,7 @@ function ReviewQueue({ results, onSelect }) {
 
   const reason = (r) => {
     if (r.decision_state === "MATH_DISCREPANCY") return "Difference between expected and actual — no deterministic cause found";
-    if (r.decision_state === "REVIEW_REQUIRED") return "AI investigation completed — requires human decision";
+    if (r.decision_state === "REVIEW_REQUIRED") return "Exception analysis completed — requires human decision";
     if (r.decision_state === "DETERMINISTIC_EXCEPTION") return r.deterministic_checks_failed.join(", ").replace(/_/g, " ");
     if (r.decision_state === "UNPROCESSED") return "Engine error — settlement could not be processed";
     return "Requires review";
@@ -39,7 +39,7 @@ function ReviewQueue({ results, onSelect }) {
       </div>
 
       <div style={{ padding: '10px 14px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid #fde68a', fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 16 }}>
-        These settlements have been escalated for human review. AI never auto-approves.
+        These settlements have been escalated for human review. LLM never auto-approves.
       </div>
 
       <div className="table-wrap">
@@ -50,7 +50,7 @@ function ReviewQueue({ results, onSelect }) {
               <th>Decision</th>
               <th style={{textAlign:'right'}}>Difference</th>
               <th>Reason</th>
-              <th>AI Investigation</th>
+              <th>Analysis</th>
               <th style={{textAlign:'center'}}>Action</th>
             </tr>
           </thead>
@@ -71,7 +71,16 @@ function ReviewQueue({ results, onSelect }) {
                   }
                 </td>
                 <td style={{textAlign:'center'}}>
-                  <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onSelect(r); }}>View</button>
+                  {onReview ? (
+                    <div style={{display:'flex', gap: 4, justifyContent:'center'}}>
+                      <button className="btn btn-sm" style={{background:'#16a34a', color:'#fff', fontSize:'0.75rem', padding:'4px 8px'}}
+                        onClick={(e) => { e.stopPropagation(); onReview(r.settlement_id, 'APPROVE'); }}>Approve</button>
+                      <button className="btn btn-sm" style={{background:'#dc2626', color:'#fff', fontSize:'0.75rem', padding:'4px 8px'}}
+                        onClick={(e) => { e.stopPropagation(); onReview(r.settlement_id, 'REJECT'); }}>Reject</button>
+                    </div>
+                  ) : (
+                    <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onSelect(r); }}>View</button>
+                  )}
                 </td>
               </tr>
             ))}
