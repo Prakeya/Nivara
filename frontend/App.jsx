@@ -312,6 +312,7 @@ function App() {
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "trace" ? "active" : ""}`} onClick={() => hasData && setView("trace")}>Trace</div>
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "queue" ? "active" : ""}`} onClick={() => hasData && setView("queue")}>Review Queue</div>
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "patterns" ? "active" : ""}`} onClick={() => hasData && setView("patterns")}>Patterns</div>
+          <div className={`tab ${!hasData ? "disabled" : ""} ${view === "sources" ? "active" : ""}`} onClick={() => hasData && setView("sources")}>Sources</div>
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "audit" ? "active" : ""}`} onClick={() => hasData && setView("audit")}>Audit Trail</div>
         </div>
 
@@ -329,6 +330,8 @@ function App() {
         {view === "dashboard" && hasData && !loading && (
           <>
             <HeroMetrics status={status} />
+            <CashFlowImpact status={status} />
+            <SettlementSimulator results={status.results} />
             <ResultsTable
               results={status.results}
               selectedId={selected?.settlement_id}
@@ -338,7 +341,17 @@ function App() {
         )}
 
         {view === "trace" && (
-          <ReconciliationTrace result={selected} onBack={() => setView(prevView)} onReview={handleHumanReview} />
+          <>
+            <ReconciliationTrace result={selected} onBack={() => setView(prevView)} onReview={handleHumanReview} />
+            {selected && selected.agent_response && selected.agent_response.trace && selected.agent_response.trace.steps && selected.agent_response.trace.steps.length > 0 && (
+              <AgentReasoningTree agentResponse={selected.agent_response} />
+            )}
+            {selected && <SettlementRiskRadar result={selected} />}
+          </>
+        )}
+
+        {view === "sources" && hasData && !loading && (
+          <CrossSourceLinker status={status} />
         )}
 
         {view === "queue" && hasData && !loading && (

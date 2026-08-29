@@ -184,6 +184,16 @@
     .text-right { text-align: right; }
     .text-center { text-align: center; }
     .w-full { width: 100%; }
+
+    /* Animations */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
   </style>
 </head>
 <body>
@@ -200,6 +210,11 @@
   <script type="text/babel" src="/static/components/ReviewQueue.jsx"></script>
   <script type="text/babel" src="/static/components/AuditTrace.jsx"></script>
   <script type="text/babel" src="/static/components/BatchPatterns.jsx"></script>
+  <script type="text/babel" src="/static/components/SettlementSimulator.jsx"></script>
+  <script type="text/babel" src="/static/components/AgentReasoningTree.jsx"></script>
+  <script type="text/babel" src="/static/components/SettlementRiskRadar.jsx"></script>
+  <script type="text/babel" src="/static/components/CrossSourceLinker.jsx"></script>
+  <script type="text/babel" src="/static/components/CashFlowImpact.jsx"></script>
   <script type="text/babel" src="/static/App.jsx"></script>
 </body>
 </html>
