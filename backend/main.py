@@ -499,6 +499,16 @@ async def health() -> JSONResponse:
     return JSONResponse(content={"status": "ok", "version": "0.1.0"})
 
 
+@app.get("/audit/{upload_hash}/verify")
+async def verify_audit_chain(upload_hash: str) -> JSONResponse:
+    """Verify hash chain integrity for a batch. Returns verification result."""
+    if not re.fullmatch(r"[0-9a-f]{64}", upload_hash):
+        raise HTTPException(status_code=400, detail=f"Invalid upload hash format: {upload_hash}")
+    audit = _get_audit_logger()
+    result = audit.verify_chain(upload_hash)
+    return JSONResponse(content=result)
+
+
 # ---------------------------------------------------------------------------
 # Human Review API
 # ---------------------------------------------------------------------------

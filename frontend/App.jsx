@@ -168,6 +168,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const toastId = useRef(0);
 
   const addToast = useCallback((message, type = "info") => {
@@ -294,6 +295,15 @@ function App() {
       </div>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {status && status.ai_mode === "demo" && !bannerDismissed && (
+        <div style={{background:'#fef3c7', borderBottom:'1px solid #fcd34d', padding:'8px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.85rem', color:'#92400e'}}>
+          <span>
+            <strong>Deterministic Demo Mode</strong> &mdash; heuristic AI classifications. Set <code style={{background:'#fde68a', padding:'1px 4px', borderRadius:3}}>OPENAI_API_KEY</code> environment variable for live LLM investigation.
+          </span>
+          <button onClick={() => setBannerDismissed(true)} style={{background:'none', border:'none', color:'#92400e', cursor:'pointer', fontSize:'1.1rem', padding:'0 4px'}}>&times;</button>
+        </div>
+      )}
 
       <div className="container">
         <div className="tab-bar">
