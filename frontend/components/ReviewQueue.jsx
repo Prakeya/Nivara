@@ -39,7 +39,7 @@ function ReviewQueue({ results, onSelect, onReview }) {
       </div>
 
       <div style={{ padding: '10px 14px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid #fde68a', fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 16 }}>
-        These settlements have been escalated for human review. LLM never auto-approves.
+        These settlements have been escalated for human review. Nivara's AI investigates every discrepancy and generates structured evidence, but never auto-approves financial transactions. Humans retain final authority.
       </div>
 
       <div className="table-wrap">
