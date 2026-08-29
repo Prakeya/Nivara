@@ -405,6 +405,22 @@ pip install -r requirements.txt
 
 ---
 
+# One-Command Demo
+
+Run the full pipeline end-to-end:
+
+```bash
+python3 demo.py
+```
+
+This will:
+1. Generate 80 synthetic settlements with ground truth
+2. Run the full test suite (482 tests)
+3. Ingest → Link → Reconcile → AI Investigate → Evaluate
+4. Print match rate, per-class F1, and throughput
+
+---
+
 # Generate Synthetic Evaluation Data
 
 Generate an 80-settlement evaluation dataset:
@@ -442,7 +458,7 @@ The application can then be accessed through the configured local frontend/API.
 Run the complete test suite:
 
 ```bash
-PYTHONPATH="$PWD" pytest tests/ -q
+pytest tests/ -q
 ```
 
 The test suite covers:

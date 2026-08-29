@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ backend/
 COPY frontend/ frontend/
 COPY data/evaluation/ data/evaluation/
+COPY tests/ ./tests/
+COPY demo.py ./demo.py
 
 EXPOSE 8000
 
