@@ -1,26 +1,28 @@
-# NIVARA — AI Settlement Intelligence Agent
+# NIVARA — Settlement Intelligence Agent
 
 **Track:** Razorpay Buildathon 2026 — Track 04: AI Finance Controller
 
-> **Deterministic when provable. AI when reasoning is required. Human when uncertainty remains.**
+> **Deterministic when provable. LLM when reasoning is required. Human when uncertainty remains.**
+
+Zero auto-approvals by design. All financial decisions are deterministic or escalated to human review.
 
 ---
 
 ## Overview
 
-Nivara is an AI-assisted financial reconciliation platform designed to reconcile Razorpay settlements against transaction, refund, and bank-credit records while maintaining strict financial safety controls.
+Nivara is an LLM-assisted financial reconciliation platform designed to reconcile Razorpay settlements against transaction, refund, and bank-credit records while maintaining strict financial safety controls.
 
-Traditional reconciliation is often manual and time-consuming. A naïve AI approach introduces another risk: allowing an LLM to directly interpret raw financial records, calculate amounts, or approve discrepancies.
+Traditional reconciliation is often manual and time-consuming. A naive approach of sending raw data to an LLM introduces risks: allowing an LLM to directly interpret raw financial records, calculate amounts, or approve discrepancies.
 
 **Nivara takes the opposite approach.**
 
-The system separates deterministic financial computation from AI-assisted investigation:
+The system separates deterministic financial computation from LLM-assisted investigation:
 
 1. **Python proves what can be proven.**
-2. **AI investigates what requires reasoning.**
+2. **LLM classifies what requires reasoning.**
 3. **Humans make the final decision when uncertainty remains.**
 
-The AI is deliberately constrained and can never automatically approve a financial reconciliation.
+The LLM is deliberately constrained and can never automatically approve a financial reconciliation.
 
 ---
 
@@ -69,8 +71,8 @@ The system:
 6. Runs deterministic reconciliation rules.
 7. Calculates expected and actual amounts using integer paise.
 8. Identifies deterministic exceptions.
-9. Creates structured evidence for eligible AI investigations.
-10. Validates AI responses and evidence citations.
+9. Creates structured evidence for eligible LLM exception analysis.
+10. Validates LLM responses and evidence citations.
 11. Escalates uncertain cases to human review.
 12. Records decisions in an append-only audit trail.
 13. Detects batch-level patterns.
@@ -80,7 +82,7 @@ The system:
 
 # Core Architecture
 
-## Deterministic → AI → Human
+## Deterministic → LLM → Human
 
 ### 1. Deterministic Reconciliation Engine
 
@@ -103,20 +105,20 @@ It validates:
 
 The LLM is **not involved** in these calculations.
 
-### 2. AI Investigator
+### 2. LLM Exception Analyzer
 
-AI is used only when deterministic rules cannot fully explain a discrepancy.
+LLM is used only when deterministic rules cannot fully explain a discrepancy.
 
-The AI receives a **structured evidence packet**, not raw CSV files.
+The LLM receives a **structured evidence packet**, not raw CSV files.
 
-The AI:
+The LLM:
 
 * Classifies the discrepancy
 * Produces an explanation
 * References supplied evidence
 * Provides a confidence score
 
-The AI cannot calculate financial amounts or modify financial records.
+The LLM cannot calculate financial amounts or modify financial records.
 
 ### 3. Human Review
 
@@ -127,7 +129,7 @@ The reviewer can inspect:
 * Settlement details
 * Deterministic checks
 * Evidence
-* AI explanation
+* LLM explanation
 * Confidence
 * Audit history
 
@@ -145,7 +147,7 @@ All financial arithmetic is performed by deterministic Python code using integer
 
 ### 2. AI Never Modifies Financial Records
 
-The AI response schema does not contain financial fields such as:
+The LLM response schema does not contain financial fields such as:
 
 ```text
 amount
@@ -160,7 +162,7 @@ Unexpected fields are rejected.
 
 ### 3. AI Never Auto-Approves
 
-AI recommendations are restricted to:
+LLM recommendations are restricted to:
 
 ```text
 ESCALATE_TO_HUMAN
@@ -180,7 +182,7 @@ Unsupported evidence is rejected.
 
 ### 5. AI Failures Fail Safely
 
-Timeouts, malformed responses, API failures, invalid evidence, and other AI failures result in:
+Timeouts, malformed responses, API failures, invalid evidence, and other LLM failures result in:
 
 ```text
 UNRESOLVED
@@ -249,7 +251,7 @@ Difference == 0
 
 If deterministic checks fail, a deterministic exception is recorded.
 
-If deterministic checks pass but the financial result still does not reconcile, the case can proceed to AI investigation.
+If deterministic checks pass but the financial result still does not reconcile, the case can proceed to LLM exception analysis.
 
 ---
 
@@ -276,7 +278,7 @@ If deterministic checks pass but the financial result still does not reconcile, 
           CLEAN_MATCH        DISCREPANCY
                │                 │
                │                 ▼
-               │          AI Investigator
+               │          LLM Exception Analyzer
                │                 │
                │       Structured Evidence
                │                 │
@@ -307,7 +309,7 @@ If deterministic checks pass but the financial result still does not reconcile, 
 | 4     | Deterministic Reconciliation Engine    |
 | 5     | Synthetic Evaluation Data Generator    |
 | 6     | Evaluation Harness                     |
-| 7     | AI Investigator                        |
+| 7     | LLM Exception Analyzer                |
 | 8     | Batch-Level Pattern Analysis           |
 | 9     | Append-Only Audit Logger               |
 | 10    | FastAPI API                            |
@@ -476,7 +478,7 @@ The synthetic evaluation dataset contains **80 labeled settlements** across 11 e
 | Bank Mismatch            |     5 | Caught — DET-EXCEPTION (bank_credit_existence)        |
 | Fee Mismatch             |     5 | Caught — DET-EXCEPTION (fee_validation)               |
 | Tax Inconsistency        |     3 | Caught — DET-EXCEPTION (tax_validation)               |
-| Refund Timing            |     5 | Caught — MATH_DISCREPANCY (detected by AI layer)      |
+| Refund Timing            |     5 | Caught — MATH_DISCREPANCY (detected by LLM layer)      |
 | Adjustment Entry         |     5 | Caught — MATH_DISCREPANCY (amount differs from expected) |
 | Partial Settlement       |     4 | Caught — DET-EXCEPTION (amount_cross_check)           |
 | Refund After Settlement  |     5 | **Missed** — engine blind spot (CLEAN_MATCH)          |
@@ -484,7 +486,7 @@ The synthetic evaluation dataset contains **80 labeled settlements** across 11 e
 | Unexplained              |     8 | Caught — MATH_DISCREPANCY (all checks pass, diff≠0)   |
 | **Total**                | **80** |                                                      |
 
-**11 edge-case categories** include 4 that the engine cannot catch (refund_after_settlement, timing_race) — these are deliberate blind spots that expose where the deterministic engine needs AI or additional checks.
+**11 edge-case categories** include 4 that the engine cannot catch (refund_after_settlement, timing_race) — these are deliberate blind spots that expose where the deterministic engine needs LLM or additional checks.
 
 ---
 
@@ -512,7 +514,7 @@ Nivara uses a **confusion matrix** approach against known ground-truth labels:
 * **refund_after_settlement:** A refund processed after settlement is not in `linked_refund_ids`. The engine computes expected = payments - refunds - fees - tax, finds difference == 0, and returns CLEAN_MATCH. But the merchant was overpaid.
 * **timing_race:** A refund created during the settlement processing window is not linked. Same outcome — engine says clean, but the refund should have been deducted.
 
-These false negatives are **honest** — they show where the deterministic engine needs AI investigation or additional checks.
+These false negatives are **honest** — they show where the deterministic engine needs LLM exception analysis or additional checks.
 
 **What a real-world dataset would include:** partial settlements across multiple payouts, multi-currency transactions, adjustments and chargebacks, ambiguous timing edge cases, and records from multiple merchants with overlapping payment IDs. Our synthetic data does not capture this complexity.
 
@@ -581,7 +583,7 @@ Review:
 * Clean matches
 * Exceptions
 * Unresolved cases
-* AI investigations
+ * LLM investigations
 
 ### 3. Inspect a Clean Match
 
@@ -593,14 +595,14 @@ Open a fee, tax, bank, or reference exception.
 
 The system identifies the deterministic rule that failed.
 
-### 5. Inspect an AI Investigation
+### 5. Inspect an LLM Exception Analysis
 
 Open a discrepancy requiring reasoning.
 
 The dashboard displays:
 
 * Evidence
-* AI classification
+* LLM classification
 * Explanation
 * Confidence
 * Escalation status

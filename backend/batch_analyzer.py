@@ -1,9 +1,13 @@
 """
-Phase 8: Batch-Level AI Pattern Analysis
+Phase 8: Deterministic Batch-Level Pattern Analysis
 
 After individual settlements are processed, analyzes the entire batch for
-cross-settlement patterns. Safe: does not approve anything. Surfaces
-patterns humans miss.
+cross-settlement patterns using deterministic rules. Does NOT use AI/LLM.
+Safe: does not approve anything. Surfaces patterns humans miss.
+
+This module is intentionally deterministic — pattern detection across
+settlements must be reproducible and auditable. AI-assisted pattern
+detection is handled separately in the agent layer.
 
 Usage:
     from backend.batch_analyzer import analyze_batch

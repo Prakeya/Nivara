@@ -5,6 +5,9 @@ Scores a batch of reconciliation results against ground-truth labels.
 Computes match rate, false accept rate, safe escalation rate,
 per-class precision/recall/F1, AI invocation rate, and processing time.
 
+Throughput benchmark measures pure in-memory reconciliation logic.
+End-to-end throughput including I/O is not benchmarked.
+
 Usage:
     from backend.evaluation import evaluate_batch, format_report
     metrics = evaluate_batch(results, ground_truth, batch_time_seconds=48.0)
@@ -121,6 +124,17 @@ class EvaluationMetrics:
     macro_precision: float = 0.0
     macro_recall: float = 0.0
     macro_f1: float = 0.0
+
+    # Agentic metrics
+    avg_agent_iterations: float = 0.0
+    total_agent_tool_calls: int = 0
+    tool_distribution: dict[str, int] = field(default_factory=dict)
+    self_correction_rate: float = 0.0
+    auto_resolution_count: int = 0
+    auto_resolution_rate: float = 0.0
+    loop_closure_rate: float = 0.0
+    human_review_count: int = 0
+    pending_review_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +313,40 @@ def evaluate_batch(
     macro_recall = sum(macro_r_values) / len(macro_r_values) if macro_r_values else 0.0
     macro_f1 = sum(macro_f1_values) / len(macro_f1_values) if macro_f1_values else 0.0
 
+    # Agentic metrics
+    total_iterations = 0
+    total_tool_calls = 0
+    total_self_corrections = 0
+    auto_resolution_count = 0
+    human_review_count = 0
+    pending_review_count = 0
+
+    for result in results:
+        if result.agent_iterations > 0:
+            total_iterations += result.agent_iterations
+            total_tool_calls += result.agent_tool_calls
+
+        # Track resolution status
+        if result.decision == DecisionState.AUTO_RESOLVED:
+            auto_resolution_count += 1
+        elif result.decision == DecisionState.RESOLVED_BY_HUMAN:
+            human_review_count += 1
+        elif result.decision in (DecisionState.REVIEW_REQUIRED, DecisionState.UNRESOLVED):
+            pending_review_count += 1
+
+        # Self-corrections from agent trace
+        if result.agent_response and result.agent_response.trace:
+            total_self_corrections += result.agent_response.trace.self_corrections
+
+    ai_investigated_count = sum(
+        1 for r in results if r.agent_iterations > 0
+    )
+    avg_iterations = total_iterations / ai_investigated_count if ai_investigated_count > 0 else 0.0
+    self_correction_rate = total_self_corrections / ai_investigated_count if ai_investigated_count > 0 else 0.0
+    total_resolutions = auto_resolution_count + human_review_count + pending_review_count
+    auto_resolution_rate = auto_resolution_count / total_resolutions if total_resolutions > 0 else 0.0
+    loop_closure_rate = (auto_resolution_count + human_review_count) / total_resolutions if total_resolutions > 0 else 0.0
+
     return EvaluationMetrics(
         total=total,
         true_positives=tp,
@@ -324,6 +372,14 @@ def evaluate_batch(
         macro_precision=macro_precision,
         macro_recall=macro_recall,
         macro_f1=macro_f1,
+        avg_agent_iterations=avg_iterations,
+        total_agent_tool_calls=total_tool_calls,
+        self_correction_rate=self_correction_rate,
+        auto_resolution_count=auto_resolution_count,
+        auto_resolution_rate=auto_resolution_rate,
+        loop_closure_rate=loop_closure_rate,
+        human_review_count=human_review_count,
+        pending_review_count=pending_review_count,
     )
 
 

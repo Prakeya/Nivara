@@ -16,7 +16,7 @@ function ToastContainer({ toasts, onDismiss }) {
 }
 
 /* ── ReconciliationTrace ── */
-function ReconciliationTrace({ result, onBack }) {
+function ReconciliationTrace({ result, onBack, onReview }) {
   if (!result) return (
     <div className="card">
       <div className="empty-state">
@@ -28,6 +28,7 @@ function ReconciliationTrace({ result, onBack }) {
   );
 
   const ai = result.ai_response;
+  const agent = result.agent_response;
   const hasFailed = result.deterministic_checks_failed.length > 0;
   const isClean = result.decision_state === "CLEAN_MATCH";
 
@@ -42,7 +43,7 @@ function ReconciliationTrace({ result, onBack }) {
             <span className="badge mock-tag">DETERMINISTIC DEMO</span>
           )}
           <span className={`badge ${isClean ? "clean" : ai ? "review" : "exception"}`}>
-            {ai ? (result.ai_mode === "demo" ? "Deterministic Classification" : "AI Investigated") : isClean ? "Clean Match" : "Deterministic Rule"}
+            {ai ? (result.ai_mode === "demo" ? "Deterministic Classification" : "LLM Classified") : isClean ? "Clean Match" : "Deterministic Rule"}
           </span>
         </div>
       </div>
@@ -57,6 +58,12 @@ function ReconciliationTrace({ result, onBack }) {
         <div className="trace-sep">{'\u2500'.repeat(48)}</div>
         <div><span className="t-label">Difference</span> <span className="t-dim"> </span> <span className={result.difference_paise === 0 ? "t-good" : "t-accent"}>{'\u20B9'}{(result.difference_paise / 100).toLocaleString('en-IN')}</span></div>
         <div><span className="t-label">Decision</span>   <span className="t-dim">  </span> <span className={isClean ? "t-good" : "t-accent"}>{result.decision_state}</span></div>
+        {result.resolution_status && result.resolution_status !== "OPEN" && (
+          <div><span className="t-label">Resolution</span> <span className="t-dim"> </span> <span style={{color:'#c084fc'}}>{result.resolution_status}</span></div>
+        )}
+        {result.agent_iterations > 0 && (
+          <div><span className="t-label">Agent Iterations</span> <span className="t-dim"> </span> <span style={{color:'#60a5fa'}}>{result.agent_iterations}</span></div>
+        )}
         <div className="trace-sep">{'\u2500'.repeat(48)}</div>
         {result.deterministic_checks_passed.length > 0 && (
           <div><span className="t-good">PASSED</span> <span className="t-dim">{result.deterministic_checks_passed.join('  ')}</span></div>
@@ -68,7 +75,7 @@ function ReconciliationTrace({ result, onBack }) {
 
       {ai && (
         <div className="ai-section">
-          <h4>{result.ai_mode === "demo" ? "Deterministic Demo (Heuristic Classification)" : "AI Investigation"}</h4>
+          <h4>{result.ai_mode === "demo" ? "Deterministic Demo (Heuristic Classification)" : "Exception Analysis"}</h4>
           <div className="trace-box" style={{ background: '#1e1b4b' }}>
             <div><span className="t-label">Classification</span>  <span className="t-dim"> </span> <span style={{color:'#c084fc'}}>{ai.classification}</span></div>
             <div><span className="t-label">Confidence</span>     <span className="t-dim">    </span> <span style={{color:'#c084fc'}}>{result.ai_mode === "demo" ? "Heuristic" : `${(ai.raw_confidence * 100).toFixed(0)}%`}</span></div>
@@ -85,7 +92,66 @@ function ReconciliationTrace({ result, onBack }) {
 
       {!ai && (
         <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', border: '1px solid #bbf7d0', fontSize: '0.85rem', color: 'var(--green)' }}>
-          <strong>Deterministic rules completely explain this settlement.</strong> AI investigation not required.
+          <strong>Deterministic rules completely explain this settlement.</strong> No exception analysis needed.
+        </div>
+      )}
+
+      {/* Agent Trace Section */}
+      {agent && agent.trace && agent.trace.steps && agent.trace.steps.length > 0 && (
+        <div className="ai-section" style={{ marginTop: 16 }}>
+          <h4>Agent Reasoning Trace</h4>
+          <div className="trace-box" style={{ background: '#0f172a' }}>
+            {agent.trace.steps.map((step, idx) => (
+              <div key={idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: idx < agent.trace.steps.length - 1 ? '1px solid #1e293b' : 'none' }}>
+                <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 4}}>
+                  <span className="badge" style={{
+                    background: step.action_type === 'TOOL_CALL' ? '#1e40af' : step.action_type === 'DECISION' ? '#7c3aed' : '#374151',
+                    color: '#fff', fontSize: '0.7rem', padding: '2px 6px'
+                  }}>{step.action_type}</span>
+                  <span style={{color:'#94a3b8', fontSize: '0.75rem'}}>Step {step.step_number}</span>
+                </div>
+                <div style={{color:'#e2e8f0', fontSize: '0.85rem'}}>{step.thought}</div>
+                {step.tool_name && (
+                  <div style={{color:'#60a5fa', fontSize: '0.8rem', marginTop: 2}}>
+                    Tool: {step.tool_name}
+                    {step.tool_args && Object.keys(step.tool_args).length > 0 && (
+                      <span style={{color:'#94a3b8'}}> ({JSON.stringify(step.tool_args)})</span>
+                    )}
+                  </div>
+                )}
+                {step.tool_result && (
+                  <div style={{color:'#4ade80', fontSize: '0.8rem', marginTop: 2}}>
+                    Result: {step.tool_result.substring(0, 200)}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="trace-sep">{'\u2500'.repeat(48)}</div>
+            <div><span className="t-label">Total Iterations</span> <span className="t-dim"> </span> <span style={{color:'#60a5fa'}}>{agent.trace.iteration_count}</span></div>
+            <div><span className="t-label">Tool Calls</span> <span className="t-dim">      </span> <span style={{color:'#60a5fa'}}>{agent.tool_calls_made}</span></div>
+            {agent.trace.self_corrections > 0 && (
+              <div><span className="t-label">Self-Corrections</span> <span className="t-dim"> </span> <span style={{color:'#fbbf24'}}>{agent.trace.self_corrections}</span></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Human Review Action */}
+      {result.escalate_to_human && result.decision_state !== "CLEAN_MATCH" && onReview && (
+        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid #fde68a' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 8, fontWeight: 600 }}>Human Review Required</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" style={{background: '#16a34a', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'APPROVE')}>Approve</button>
+            <button className="btn" style={{background: '#dc2626', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'REJECT')}>Reject</button>
+          </div>
+        </div>
+      )}
+
+      {result.human_review && (
+        <div style={{ marginTop: 16, padding: '12px 16px', background: '#f0fdf4', borderRadius: 'var(--radius)', border: '1px solid #bbf7d0', fontSize: '0.85rem' }}>
+          <div style={{ fontWeight: 600, color: '#166534', marginBottom: 4 }}>Human Decision: {result.human_review.decision}</div>
+          <div style={{ color: '#166534' }}>Reason: {result.human_review.reason}</div>
+          <div style={{ color: '#6b7280', fontSize: '0.8rem' }}>Reviewer: {result.human_review.reviewer_id}</div>
         </div>
       )}
     </div>
@@ -158,6 +224,54 @@ function App() {
     setSelected(null);
   }, []);
 
+  const handleHumanReview = useCallback(async (settlementId, decision) => {
+    try {
+      const resp = await fetch(
+        `${API}/api/review/${settlementId}/decision?decision=${decision}&reason=Manual+review&reviewer_id=frontend_user`,
+        { method: "POST" }
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      // Update local state
+      if (status) {
+        const updatedResults = status.results.map(r => {
+          if (r.settlement_id === settlementId) {
+            return {
+              ...r,
+              resolution_status: decision === "REJECT" ? "REJECTED" : "RESOLVED_BY_HUMAN",
+              human_review: {
+                decision: decision,
+                reason: "Manual review",
+                reviewer_id: "frontend_user",
+                timestamp: data.timestamp,
+              },
+            };
+          }
+          return r;
+        });
+        setStatus({ ...status, results: updatedResults });
+
+        if (selected && selected.settlement_id === settlementId) {
+          setSelected({
+            ...selected,
+            resolution_status: decision === "REJECT" ? "REJECTED" : "RESOLVED_BY_HUMAN",
+            human_review: {
+              decision: decision,
+              reason: "Manual review",
+              reviewer_id: "frontend_user",
+              timestamp: data.timestamp,
+            },
+          });
+        }
+      }
+
+      addToast(`Settlement ${settlementId} ${decision.toLowerCase()}`, "success");
+    } catch (err) {
+      addToast(`Failed to submit review: ${err.message}`, "error");
+    }
+  }, [status, selected, addToast]);
+
   const hasData = status && status.status === "completed";
 
   return (
@@ -213,11 +327,11 @@ function App() {
         )}
 
         {view === "trace" && (
-          <ReconciliationTrace result={selected} onBack={() => setView("dashboard")} />
+          <ReconciliationTrace result={selected} onBack={() => setView("dashboard")} onReview={handleHumanReview} />
         )}
 
         {view === "queue" && hasData && !loading && (
-          <ReviewQueue results={status.results} onSelect={(r) => { setSelected(r); setView("trace"); }} />
+          <ReviewQueue results={status.results} onSelect={(r) => { setSelected(r); setView("trace"); }} onReview={handleHumanReview} />
         )}
 
         {view === "patterns" && hasData && !loading && (

@@ -25,6 +25,8 @@ Outcomes:
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime
 from typing import Optional
 
 from backend.models import (
@@ -35,6 +37,17 @@ from backend.models import (
 from backend.linking import LinkageResult, LinkageError
 
 logger = logging.getLogger("nivara.engine")
+
+
+def _parse_date(val) -> date:
+    """Parse a date from string, date, or datetime."""
+    if isinstance(val, date) and not isinstance(val, datetime):
+        return val
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, str):
+        return datetime.fromisoformat(val).date()
+    return datetime.now().date()
 
 
 # ---------------------------------------------------------------------------
@@ -367,13 +380,14 @@ def run_engine(
     refunds: list[dict],
     bank_credits: list[dict],
     llm_client=None,
+    max_workers: int = 4,
 ) -> list[ReconciliationResult]:
     """
     Run deterministic reconciliation for a batch of settlements.
 
     1. Links entities (reuses Phase 3)
     2. Detects duplicates (reuses Phase 2 logic)
-    3. Reconciles each settlement
+    3. Reconciles each settlement (parallel via ThreadPoolExecutor)
     4. Investigates MATH_DISCREPANCY and DETERMINISTIC_EXCEPTION cases with AI
     5. Catches crashes → UNPROCESSED
 
@@ -381,6 +395,7 @@ def run_engine(
         llm_client: LLM provider for AI investigation. If None, falls back to
             DemoLLMClient (deterministic heuristic classifier). In production,
             pass OpenAIClient; in tests, pass MockLLMClient.
+        max_workers: Number of parallel workers for settlement reconciliation.
     """
     from backend.linking import link_entities
 
@@ -402,8 +417,7 @@ def run_engine(
         if utr:
             bank_credit_utrs[bc.get("settlement_id", "")] = utr
 
-    results: list[ReconciliationResult] = []
-    for settlement in settlements:
+    def _reconcile_one(settlement: dict) -> ReconciliationResult:
         try:
             lr = linkage_by_sid.get(settlement["settlement_id"])
             if lr is None:
@@ -411,7 +425,7 @@ def run_engine(
 
             # Pass linked bank credit UTR for duplicate bank UTR detection
             linked_bank_utr = lr.bank_credit.get("utr") if lr.bank_credit else None
-            result = reconcile_settlement(
+            return reconcile_settlement(
                 settlement=settlement,
                 linked_payments=lr.linked_payments,
                 linked_refunds=lr.linked_refunds,
@@ -420,10 +434,9 @@ def run_engine(
                 duplicate_errors=all_duplicates,
                 linked_bank_utr=linked_bank_utr,
             )
-            results.append(result)
         except Exception as exc:
             logger.warning("Settlement %s marked UNPROCESSED: %s", settlement["settlement_id"], exc, exc_info=True)
-            results.append(ReconciliationResult(
+            return ReconciliationResult(
                 settlement_id=settlement["settlement_id"],
                 decision=DecisionState.UNPROCESSED,
                 difference_paise=0,
@@ -432,7 +445,13 @@ def run_engine(
                 deterministic_checks_passed=[],
                 deterministic_checks_failed=["engine_crash"],
                 escalate_to_human=True,
-            ))
+            )
+
+    results: list[ReconciliationResult] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_reconcile_one, s): s for s in settlements}
+        for future in as_completed(futures):
+            results.append(future.result())
 
     # Phase 7: AI investigation for MATH_DISCREPANCY and DETERMINISTIC_EXCEPTION cases
     from backend.ai_investigator import investigate, DemoLLMClient
@@ -441,7 +460,6 @@ def run_engine(
         FeesSummary, TaxSummary, BankCreditEvidence, TimingEvidence,
         PaymentMethod, ValidationResult, PaymentDetail, CrossSettlementContext,
     )
-    from datetime import datetime
 
     effective_llm_client = llm_client if llm_client is not None else DemoLLMClient()
 
@@ -501,10 +519,10 @@ def run_engine(
                             payment_id=p["payment_id"],
                             amount_paise=p["amount"],
                             method=method,
-                            fee_paise=p.get("fee", 0),
-                            tax_paise=p.get("tax", 0),
-                            fee_expected_paise=fee_exp,
-                            tax_expected_paise=tax_exp,
+                            fee_paise=max(0, p.get("fee", 0)),
+                            tax_paise=max(0, p.get("tax", 0)),
+                            fee_expected_paise=max(0, fee_exp),
+                            tax_expected_paise=max(0, tax_exp),
                             fee_mismatch=(p.get("fee", 0) != fee_exp),
                             tax_mismatch=(p.get("tax", 0) != tax_exp),
                         ))
@@ -545,13 +563,13 @@ def run_engine(
                         ),
                         bank_credit=BankCreditEvidence(
                             utr=bank_credit.get("utr", "") if bank_credit else "",
-                            amount_paise=bank_credit["amount"] if bank_credit else 0,
-                            date=bank_credit.get("date", datetime.now().date()) if bank_credit else datetime.now().date(),
+                            amount_paise=max(1, bank_credit["amount"]) if bank_credit else 1,
+                            date=_parse_date(bank_credit.get("date")) if bank_credit and bank_credit.get("date") else datetime.now().date(),
                         ),
                         timing=TimingEvidence(
                             settlement_created_at=datetime.fromisoformat(settlement["created_at"]) if isinstance(settlement.get("created_at"), str) else datetime.now(),
                             settled_at=datetime.fromisoformat(settlement["settled_at"]) if isinstance(settlement.get("settled_at"), str) else datetime.now(),
-                            bank_credited_at=datetime.combine(bank_credit["date"], datetime.min.time()) if bank_credit and "date" in bank_credit else datetime.now(),
+                            bank_credited_at=datetime.combine(_parse_date(bank_credit["date"]), datetime.min.time()) if bank_credit and "date" in bank_credit else datetime.now(),
                             expected_cycle_days=2,
                         ),
                         deterministic_checks_passed=result.deterministic_checks_passed,
@@ -561,12 +579,28 @@ def run_engine(
                     )
 
                     logger.info("Invoking exception analysis for %s", result.settlement_id)
-                    ai_result = investigate(evidence, llm_client=effective_llm_client)
+
+                    # Build batch memory for cross-settlement context
+                    batch_memory = (
+                        f"Batch size: {total_results}. "
+                        f"Fee exception rate: {batch_fee_exception_rate*100:.1f}%. "
+                        f"Refund rate: {batch_refund_rate*100:.1f}%. "
+                        f"Math discrepancy rate: {batch_math_disc_rate*100:.1f}%."
+                    )
+
+                    ai_result = investigate(
+                        evidence, llm_client=effective_llm_client, batch_memory=batch_memory,
+                    )
                     if ai_result.ai_response is not None:
                         result.ai_response = ai_result.ai_response
+                        result.agent_response = ai_result.agent_response
                         result.decision = ai_result.decision
                         result.escalate_to_human = True
                         result.ai_mode = "demo" if ai_result.is_mock else "live"
+                        result.agent_iterations = ai_result.agent_iterations
+                        result.agent_tool_calls = ai_result.agent_tool_calls
+                        result.resolution_confidence = ai_result.ai_response.raw_confidence
+                        result.resolution_source = "agent"
                     else:
                         # LLM failed → UNRESOLVED, keep deterministic result otherwise
                         result.decision = DecisionState.UNRESOLVED
