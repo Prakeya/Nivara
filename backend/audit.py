@@ -1,8 +1,13 @@
 """
 Phase 9: Append-Only Audit Logger
 
-Simple append-only audit trail in SQLite. One record per settlement per run.
-Never update. Never delete. upload_hash groups records by batch.
+Simple append-only audit trail in SQLite with SHA-256 hash chaining.
+One record per settlement per run. Never update. Never delete.
+upload_hash groups records by batch.
+
+Each record includes a SHA-256 hash of its payload plus the previous
+record's hash, creating a tamper-evident chain. Modifying any record
+invalidates all subsequent hashes.
 
 Schema:
     CREATE TABLE audit_log (
@@ -11,10 +16,13 @@ Schema:
         settlement_id TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         decision_state TEXT NOT NULL,
-        payload_json TEXT NOT NULL
+        payload_json TEXT NOT NULL,
+        record_hash TEXT NOT NULL,
+        prev_hash TEXT
     );
 """
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -35,7 +43,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
     settlement_id TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     decision_state TEXT NOT NULL,
-    payload_json TEXT NOT NULL
+    payload_json TEXT NOT NULL,
+    record_hash TEXT NOT NULL,
+    prev_hash TEXT
 );
 """
 
@@ -48,12 +58,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_settlement_id ON audit_log (settlement_id);
 """
 
 
+def _compute_record_hash(payload_json: str, prev_hash: Optional[str] = None) -> str:
+    """Compute SHA-256 hash of record payload + previous hash for tamper evidence."""
+    chain_input = f"{prev_hash or 'GENESIS'}:{payload_json}"
+    return hashlib.sha256(chain_input.encode("utf-8")).hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Audit record
 # ---------------------------------------------------------------------------
 
 class AuditRecord:
-    """A single append-only audit record."""
+    """A single append-only audit record with hash chain."""
 
     def __init__(
         self,
@@ -63,6 +79,8 @@ class AuditRecord:
         timestamp: str,
         decision_state: str,
         payload_json: str,
+        record_hash: str = "",
+        prev_hash: Optional[str] = None,
     ):
         self.id = id
         self.upload_hash = upload_hash
@@ -70,6 +88,8 @@ class AuditRecord:
         self.timestamp = timestamp
         self.decision_state = decision_state
         self.payload_json = payload_json
+        self.record_hash = record_hash
+        self.prev_hash = prev_hash
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -79,6 +99,8 @@ class AuditRecord:
             "timestamp": self.timestamp,
             "decision_state": self.decision_state,
             "payload_json": self.payload_json,
+            "record_hash": self.record_hash,
+            "prev_hash": self.prev_hash or "",
         }
 
     def payload(self) -> dict[str, Any]:
@@ -121,13 +143,22 @@ class AuditLogger:
             self._conn.close()
             self._conn = None
 
+    def _get_last_hash(self, upload_hash: str) -> Optional[str]:
+        """Get the hash of the most recent record for a batch (for chaining)."""
+        cursor = self._conn.execute(
+            "SELECT record_hash FROM audit_log WHERE upload_hash = ? ORDER BY timestamp DESC LIMIT 1",
+            (upload_hash,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
     def log_result(
         self,
         upload_hash: str,
         result: ReconciliationResult,
         extra_payload: Optional[dict[str, Any]] = None,
     ) -> AuditRecord:
-        """Append a reconciliation result to the audit log.
+        """Append a reconciliation result to the audit log with hash chain.
 
         Args:
             upload_hash: Hash identifying the batch upload.
@@ -165,6 +196,10 @@ class AuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
+        # Hash chain: each record's hash includes the previous record's hash
+        prev_hash = self._get_last_hash(upload_hash)
+        record_hash = _compute_record_hash(payload_json, prev_hash)
+
         record = AuditRecord(
             id=record_id,
             upload_hash=upload_hash,
@@ -172,13 +207,16 @@ class AuditLogger:
             timestamp=timestamp,
             decision_state=result.decision.value,
             payload_json=payload_json,
+            record_hash=record_hash,
+            prev_hash=prev_hash,
         )
 
         self._conn.execute(
-            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (record.id, record.upload_hash, record.settlement_id,
-             record.timestamp, record.decision_state, record.payload_json),
+             record.timestamp, record.decision_state, record.payload_json,
+             record.record_hash, record.prev_hash),
         )
         self._conn.commit()
 
@@ -214,7 +252,7 @@ class AuditLogger:
             List of AuditRecords in insertion order.
         """
         cursor = self._conn.execute(
-            "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json "
+            "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash "
             "FROM audit_log WHERE upload_hash = ? ORDER BY timestamp",
             (upload_hash,),
         )
@@ -227,6 +265,8 @@ class AuditLogger:
                 timestamp=row[3],
                 decision_state=row[4],
                 payload_json=row[5],
+                record_hash=row[6],
+                prev_hash=row[7],
             )
             for row in rows
         ]
@@ -241,7 +281,7 @@ class AuditLogger:
             List of AuditRecords in insertion order.
         """
         cursor = self._conn.execute(
-            "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json "
+            "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash "
             "FROM audit_log WHERE settlement_id = ? ORDER BY timestamp",
             (settlement_id,),
         )
@@ -254,6 +294,8 @@ class AuditLogger:
                 timestamp=row[3],
                 decision_state=row[4],
                 payload_json=row[5],
+                record_hash=row[6],
+                prev_hash=row[7],
             )
             for row in rows
         ]
@@ -288,12 +330,46 @@ class AuditLogger:
         )
         return cursor.fetchone()[0]
 
+    def verify_chain(self, upload_hash: str) -> dict[str, Any]:
+        """Verify hash chain integrity for a batch.
+
+        Returns:
+            Dict with 'valid' bool, 'total_records' count, and 'broken_at' index if invalid.
+        """
+        records = self.get_batch(upload_hash)
+        if not records:
+            return {"valid": True, "total_records": 0, "broken_at": None}
+
+        for i, record in enumerate(records):
+            expected_hash = _compute_record_hash(record.payload_json, record.prev_hash)
+            if record.record_hash != expected_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at": i,
+                    "settlement_id": record.settlement_id,
+                    "expected": expected_hash,
+                    "actual": record.record_hash,
+                }
+
+            # Verify chain continuity
+            if i > 0 and record.prev_hash != records[i - 1].record_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at": i,
+                    "settlement_id": record.settlement_id,
+                    "error": "Chain break: prev_hash does not match previous record's hash",
+                }
+
+        return {"valid": True, "total_records": len(records), "broken_at": None}
+
     def log_human_review(
         self,
         settlement_id: str,
         review: HumanReviewDecision,
     ) -> AuditRecord:
-        """Log a human review decision as an audit record.
+        """Log a human review decision as an audit record with hash chain.
 
         Uses upload_hash = 'human_review' to distinguish from batch uploads.
         """
@@ -313,6 +389,10 @@ class AuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
+        # Hash chain for human_review records
+        prev_hash = self._get_last_hash("human_review")
+        record_hash = _compute_record_hash(payload_json, prev_hash)
+
         record = AuditRecord(
             id=record_id,
             upload_hash="human_review",
@@ -320,13 +400,16 @@ class AuditLogger:
             timestamp=timestamp,
             decision_state=payload["decision_state"],
             payload_json=payload_json,
+            record_hash=record_hash,
+            prev_hash=prev_hash,
         )
 
         self._conn.execute(
-            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (record.id, record.upload_hash, record.settlement_id,
-             record.timestamp, record.decision_state, record.payload_json),
+             record.timestamp, record.decision_state, record.payload_json,
+             record.record_hash, record.prev_hash),
         )
         self._conn.commit()
 
@@ -345,6 +428,11 @@ class InMemoryAuditLogger:
 
     def close(self) -> None:
         pass
+
+    def _get_last_hash(self, upload_hash: str) -> Optional[str]:
+        """Get the hash of the most recent record for a batch (for chaining)."""
+        batch = [r for r in self.records if r.upload_hash == upload_hash]
+        return batch[-1].record_hash if batch else None
 
     def log_result(
         self,
@@ -380,6 +468,10 @@ class InMemoryAuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
+        # Hash chain
+        prev_hash = self._get_last_hash(upload_hash)
+        record_hash = _compute_record_hash(payload_json, prev_hash)
+
         record = AuditRecord(
             id=record_id,
             upload_hash=upload_hash,
@@ -387,6 +479,8 @@ class InMemoryAuditLogger:
             timestamp=timestamp,
             decision_state=result.decision.value,
             payload_json=payload_json,
+            record_hash=record_hash,
+            prev_hash=prev_hash,
         )
 
         self.records.append(record)
@@ -415,6 +509,32 @@ class InMemoryAuditLogger:
     def total_records(self, upload_hash: str) -> int:
         return len(self.get_batch(upload_hash))
 
+    def verify_chain(self, upload_hash: str) -> dict[str, Any]:
+        """Verify hash chain integrity (in-memory version)."""
+        records = self.get_batch(upload_hash)
+        if not records:
+            return {"valid": True, "total_records": 0, "broken_at": None}
+
+        for i, record in enumerate(records):
+            expected_hash = _compute_record_hash(record.payload_json, record.prev_hash)
+            if record.record_hash != expected_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at": i,
+                    "settlement_id": record.settlement_id,
+                }
+            if i > 0 and record.prev_hash != records[i - 1].record_hash:
+                return {
+                    "valid": False,
+                    "total_records": len(records),
+                    "broken_at": i,
+                    "settlement_id": record.settlement_id,
+                    "error": "Chain break",
+                }
+
+        return {"valid": True, "total_records": len(records), "broken_at": None}
+
     def log_human_review(
         self,
         settlement_id: str,
@@ -437,6 +557,10 @@ class InMemoryAuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
+        # Hash chain
+        prev_hash = self._get_last_hash("human_review")
+        record_hash = _compute_record_hash(payload_json, prev_hash)
+
         record = AuditRecord(
             id=record_id,
             upload_hash="human_review",
@@ -444,6 +568,8 @@ class InMemoryAuditLogger:
             timestamp=timestamp,
             decision_state=payload["decision_state"],
             payload_json=payload_json,
+            record_hash=record_hash,
+            prev_hash=prev_hash,
         )
 
         self.records.append(record)

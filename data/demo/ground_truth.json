@@ -50,7 +50,7 @@
   },
   {
     "settlement_id": "SETL_008",
-    "label": "timing_mismatch",
+    "label": "timing_race",
     "expected_amount_paise": 53584,
     "actual_amount_paise": 53584,
     "difference_paise": 0

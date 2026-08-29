@@ -59,6 +59,11 @@ def main() -> int:
     from backend.ingestion import ingest_csvs
     from backend.engine import run_engine
     from backend.evaluation import evaluate_batch, format_report, format_label_breakdown
+    from backend.audit import AuditLogger
+    from backend.batch_analyzer import analyze_batch
+
+    # End-to-end timing (includes CSV parsing + reconciliation + AI + audit + SQLite)
+    e2e_start = time.time()
 
     ing = ingest_csvs(
         transactions_path="data/evaluation/transactions.csv",
@@ -66,24 +71,47 @@ def main() -> int:
         refunds_path="data/evaluation/refunds.csv",
         bank_credits_path="data/evaluation/bank_credits.csv",
     )
+    ingest_time = time.time() - e2e_start
 
     with open("data/evaluation/ground_truth.json") as f:
         ground_truth = json.load(f)
 
-    start = time.time()
+    reconcile_start = time.time()
     results = run_engine(
         ing.transactions, ing.settlements, ing.refunds, ing.bank_credits,
     )
-    elapsed = time.time() - start
+    reconcile_time = time.time() - reconcile_start
+
+    # Audit trail write (SQLite)
+    audit_start = time.time()
+    audit = AuditLogger("data/audit/demo_audit.db")
+    audit.log_batch("demo_evaluation", results)
+    chain_result = audit.verify_chain("demo_evaluation")
+    audit.close()
+    audit_time = time.time() - audit_start
+
+    # Batch analysis
+    patterns = analyze_batch(results)
+
+    e2e_elapsed = time.time() - e2e_start
 
     metrics = evaluate_batch(
         results, ground_truth,
-        batch_time_seconds=elapsed,
+        batch_time_seconds=e2e_elapsed,
         ai_client_available=False,
     )
 
     print(f"\n{format_report(metrics)}")
     print(f"\n{format_label_breakdown(metrics)}")
+
+    # End-to-end throughput breakdown
+    print(f"\n--- End-to-End Throughput Breakdown ---")
+    print(f"  CSV ingestion:     {ingest_time*1000:.1f}ms")
+    print(f"  Reconciliation:    {reconcile_time*1000:.1f}ms ({reconcile_time/metrics.total*1000:.2f}ms/settlement)")
+    print(f"  Audit + SQLite:    {audit_time*1000:.1f}ms")
+    print(f"  Batch analysis:    {(e2e_elapsed - ingest_time - reconcile_time - audit_time)*1000:.1f}ms")
+    print(f"  Total E2E:         {e2e_elapsed*1000:.1f}ms ({metrics.throughput_per_second:,.0f} settlements/sec)")
+    print(f"  Hash chain valid:  {chain_result['valid']} ({chain_result['total_records']} records)")
 
     # Step 4: Summary
     print(f"\n{'='*60}")
