@@ -21,8 +21,8 @@ class TestMCPClient:
         import os
         old_key = os.environ.get("RAZORPAY_API_KEY")
         old_secret = os.environ.get("RAZORPAY_API_SECRET")
-        os.environ["RAZORPAY_API_KEY"] = "test_key"
-        os.environ["RAZORPAY_API_SECRET"] = "test_secret"
+        os.environ["RAZORPAY_API_KEY"] = "test-placeholder-key-NOT-REAL-12345"
+        os.environ["RAZORPAY_API_SECRET"] = "test-placeholder-secret-NOT-REAL-67890"
         try:
             client = RazorpayMCPClient.from_env()
             assert client is not None

@@ -6,6 +6,7 @@ Valid evidence → correct classification. AI cannot alter expected_amount.
 """
 
 from datetime import datetime, date
+import json
 
 import pytest
 
@@ -618,3 +619,41 @@ class TestProductionLLMPath:
                 cited_evidence=["timing"],
                 expected_amount_paise=100000,  # forbidden field
             )
+
+
+# ---------------------------------------------------------------------------
+# DemoLLMClient auto-resolve tests
+# ---------------------------------------------------------------------------
+
+class TestDemoLLMClientAutoResolve:
+    def test_trivial_case_auto_resolves_via_investigate(self):
+        """investigate() with DemoLLMClient auto-resolves when difference <= 1 paise."""
+        from backend.ai_investigator import DemoLLMClient, investigate
+
+        client = DemoLLMClient()
+        ep = _make_evidence_packet(expected=100000, actual=100001)
+        ep.deterministic_checks_failed = []
+        result = investigate(ep, llm_client=client)
+        assert result.decision == DecisionState.AUTO_RESOLVED
+        assert result.escalate_to_human is False
+
+    def test_non_trivial_case_does_not_auto_resolve(self):
+        """investigate() with DemoLLMClient does NOT auto-resolve when difference is large."""
+        from backend.ai_investigator import DemoLLMClient, investigate
+
+        client = DemoLLMClient()
+        ep = _make_evidence_packet(expected=100000, actual=95000)
+        result = investigate(ep, llm_client=client)
+        assert result.decision != DecisionState.AUTO_RESOLVED
+        assert result.escalate_to_human is True
+
+    def test_zero_difference_auto_resolves(self):
+        """investigate() with DemoLLMClient auto-resolves when difference is exactly 0."""
+        from backend.ai_investigator import DemoLLMClient, investigate
+
+        client = DemoLLMClient()
+        ep = _make_evidence_packet(expected=100000, actual=100000)
+        ep.deterministic_checks_failed = []
+        result = investigate(ep, llm_client=client)
+        assert result.decision == DecisionState.AUTO_RESOLVED
+        assert result.escalate_to_human is False

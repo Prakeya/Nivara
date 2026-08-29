@@ -130,8 +130,9 @@ class AuditLogger:
         self._init_db()
 
     def _init_db(self) -> None:
-        """Initialize database schema."""
-        self._conn = sqlite3.connect(self.db_path)
+        """Initialize database schema with WAL mode and safe journal."""
+        self._conn = sqlite3.connect(self.db_path, timeout=30)
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(SCHEMA_SQL)
         self._conn.execute(INDEX_SQL)
         self._conn.execute(INDEX_SETTLEMENT_SQL)
@@ -196,29 +197,35 @@ class AuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
-        # Hash chain: each record's hash includes the previous record's hash
-        prev_hash = self._get_last_hash(upload_hash)
-        record_hash = _compute_record_hash(payload_json, prev_hash)
+        # Hash chain: BEGIN IMMEDIATE ensures exclusive write lock —
+        # prevents concurrent reads/inserts from corrupting the chain
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            prev_hash = self._get_last_hash(upload_hash)
+            record_hash = _compute_record_hash(payload_json, prev_hash)
 
-        record = AuditRecord(
-            id=record_id,
-            upload_hash=upload_hash,
-            settlement_id=result.settlement_id,
-            timestamp=timestamp,
-            decision_state=result.decision.value,
-            payload_json=payload_json,
-            record_hash=record_hash,
-            prev_hash=prev_hash,
-        )
+            record = AuditRecord(
+                id=record_id,
+                upload_hash=upload_hash,
+                settlement_id=result.settlement_id,
+                timestamp=timestamp,
+                decision_state=result.decision.value,
+                payload_json=payload_json,
+                record_hash=record_hash,
+                prev_hash=prev_hash,
+            )
 
-        self._conn.execute(
-            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (record.id, record.upload_hash, record.settlement_id,
-             record.timestamp, record.decision_state, record.payload_json,
-             record.record_hash, record.prev_hash),
-        )
-        self._conn.commit()
+            self._conn.execute(
+                "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (record.id, record.upload_hash, record.settlement_id,
+                 record.timestamp, record.decision_state, record.payload_json,
+                 record.record_hash, record.prev_hash),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
         return record
 
@@ -389,29 +396,34 @@ class AuditLogger:
 
         payload_json = json.dumps(payload, default=str)
 
-        # Hash chain for human_review records
-        prev_hash = self._get_last_hash("human_review")
-        record_hash = _compute_record_hash(payload_json, prev_hash)
+        # Hash chain for human_review records with BEGIN IMMEDIATE
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            prev_hash = self._get_last_hash("human_review")
+            record_hash = _compute_record_hash(payload_json, prev_hash)
 
-        record = AuditRecord(
-            id=record_id,
-            upload_hash="human_review",
-            settlement_id=settlement_id,
-            timestamp=timestamp,
-            decision_state=payload["decision_state"],
-            payload_json=payload_json,
-            record_hash=record_hash,
-            prev_hash=prev_hash,
-        )
+            record = AuditRecord(
+                id=record_id,
+                upload_hash="human_review",
+                settlement_id=settlement_id,
+                timestamp=timestamp,
+                decision_state=payload["decision_state"],
+                payload_json=payload_json,
+                record_hash=record_hash,
+                prev_hash=prev_hash,
+            )
 
-        self._conn.execute(
-            "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (record.id, record.upload_hash, record.settlement_id,
-             record.timestamp, record.decision_state, record.payload_json,
-             record.record_hash, record.prev_hash),
-        )
-        self._conn.commit()
+            self._conn.execute(
+                "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (record.id, record.upload_hash, record.settlement_id,
+                 record.timestamp, record.decision_state, record.payload_json,
+                 record.record_hash, record.prev_hash),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
         return record
 

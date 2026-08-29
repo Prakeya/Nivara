@@ -101,7 +101,8 @@ class TestUploadAndStatus:
         assert "ai_investigations" in body
 
     def test_status_404_for_unknown_job(self):
-        response = client.get("/status/nonexistent")
+        # Use a valid UUID format to avoid 400 from format validation
+        response = client.get("/status/00000000-0000-0000-0000-000000000000")
         assert response.status_code == 404
 
     def test_upload_then_status_counts_match(self):
@@ -198,7 +199,9 @@ class TestAuditEndpoint:
         assert len(body["records"]) == body["total_records"]
 
     def test_audit_404_for_unknown_hash(self):
-        response = client.get("/audit/nonexistent")
+        # Use valid 64-char hex format that doesn't exist in DB
+        fake_hash = "a" * 64
+        response = client.get(f"/audit/{fake_hash}")
         assert response.status_code == 404
 
     def test_audit_records_are_append_only(self):
@@ -248,7 +251,8 @@ class TestSettlementEndpoint:
         assert body["total_records"] >= 1
 
     def test_settlement_empty_for_unknown(self):
-        response = client.get("/settlement/NONEXISTENT")
+        # Use valid SETL_NNNN format that doesn't exist in DB
+        response = client.get("/settlement/SETL_9999")
         assert response.status_code == 200
         body = response.json()
         assert body["total_records"] == 0
@@ -348,3 +352,121 @@ class TestAuditPersistence:
         settlement_resp = client.get(f"/settlement/{sid}")
         assert settlement_resp.status_code == 200
         assert settlement_resp.json()["total_records"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Review API tests
+# ---------------------------------------------------------------------------
+
+class TestReviewAPI:
+    def test_submit_review_approve(self):
+        """POST /api/review/{id}/decision with APPROVE returns 200."""
+        # First create a job with results
+        data = generate_batch()
+        files = _make_upload_files(data)
+        upload_resp = client.post("/upload", files=files)
+        job_id = upload_resp.json()["job_id"]
+
+        status_resp = client.get(f"/status/{job_id}")
+        results = status_resp.json()["results"]
+        sid = results[0]["settlement_id"]
+
+        resp = client.post(
+            f"/api/review/{sid}/decision",
+            params={"decision": "APPROVE", "reason": "Verified manually", "reviewer_id": "judge_1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["decision"] == "APPROVE"
+        assert resp.json()["status"] == "accepted"
+
+    def test_submit_review_reject(self):
+        """POST /api/review/{id}/decision with REJECT returns 200."""
+        data = generate_batch()
+        files = _make_upload_files(data)
+        upload_resp = client.post("/upload", files=files)
+        job_id = upload_resp.json()["job_id"]
+
+        status_resp = client.get(f"/status/{job_id}")
+        results = status_resp.json()["results"]
+        sid = results[0]["settlement_id"]
+
+        resp = client.post(
+            f"/api/review/{sid}/decision",
+            params={"decision": "REJECT", "reason": "Fraud detected", "reviewer_id": "judge_1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["decision"] == "REJECT"
+
+    def test_submit_review_invalid_decision(self):
+        """POST /api/review/{id}/decision with invalid decision returns 400."""
+        resp = client.post(
+            "/api/review/SETL_FAKE/decision",
+            params={"decision": "INVALID", "reason": "test", "reviewer_id": "judge_1"},
+        )
+        assert resp.status_code == 400
+
+    def test_get_pending_reviews(self):
+        """GET /api/review/pending returns list structure."""
+        resp = client.get("/api/review/pending")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "total_pending" in body
+        assert "settlements" in body
+
+    def test_get_review_status(self):
+        """GET /api/review/{settlement_id} returns review status."""
+        data = generate_batch()
+        files = _make_upload_files(data)
+        upload_resp = client.post("/upload", files=files)
+        job_id = upload_resp.json()["job_id"]
+
+        status_resp = client.get(f"/status/{job_id}")
+        results = status_resp.json()["results"]
+        sid = results[0]["settlement_id"]
+
+        resp = client.get(f"/api/review/{sid}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["settlement_id"] == sid
+        assert "reviewed" in body
+
+
+# ---------------------------------------------------------------------------
+# Upload validation tests
+# ---------------------------------------------------------------------------
+
+class TestUploadValidation:
+    def test_upload_missing_file_returns_422(self):
+        """POST /upload with missing file returns 422."""
+        # Only send transactions, missing other files
+        data = generate_batch()
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["payment_id", "order_id", "amount", "status", "method", "fee", "tax", "created_at"])
+        for t in data["transactions"][:1]:
+            writer.writerow([t["payment_id"], t["order_id"], t["amount"], t["status"], t["method"], t["fee"], t["tax"], str(t["created_at"])])
+
+        resp = client.post(
+            "/upload",
+            files={"transactions": ("transactions.csv", buf.getvalue().encode(), "text/csv")},
+        )
+        assert resp.status_code == 422
+
+    def test_upload_binary_content_returns_415(self):
+        """POST /upload with binary content returns 415."""
+        binary_content = b"\x00\x01\x02\x03\x04\x05" * 100
+        resp = client.post(
+            "/upload",
+            files=[
+                ("transactions", ("transactions.csv", binary_content, "text/csv")),
+                ("settlements", ("settlements.csv", binary_content, "text/csv")),
+                ("refunds", ("refunds.csv", binary_content, "text/csv")),
+                ("bank_credits", ("bank_credits.csv", binary_content, "text/csv")),
+            ],
+        )
+        assert resp.status_code == 415
+
+    def test_status_invalid_uuid_returns_400(self):
+        """GET /status with invalid UUID format returns 400."""
+        resp = client.get("/status/not-a-uuid")
+        assert resp.status_code == 400

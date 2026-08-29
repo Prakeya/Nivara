@@ -135,6 +135,7 @@ class TestDemoScenario:
         ai_count = sum(1 for r in results if r.ai_response is not None)
         # With the demo data, we expect some AI investigations
         # (the AI investigator is called for MATH_DISCREPANCY and REVIEW_REQUIRED cases)
+        assert ai_count > 0, "Expected at least one AI investigation in demo batch"
 
     def test_all_settled_results_escalate(self):
         """Any result with difference != 0 must escalate to human."""
@@ -167,3 +168,83 @@ class TestDemoScenario:
         for r in results:
             if r.ai_response is not None:
                 assert r.ai_response.recommended_action.value == "ESCALATE_TO_HUMAN"
+
+
+# ---------------------------------------------------------------------------
+# E2E: Hash chain lifecycle
+# ---------------------------------------------------------------------------
+
+class TestE2EHashChain:
+    def test_generate_audit_verify_chain(self):
+        """Full lifecycle: generate -> audit -> verify_chain."""
+        from backend.audit import AuditLogger
+        from backend.generator import generate_batch
+
+        data = generate_batch()
+        results = run_engine(
+            data["transactions"],
+            data["settlements"],
+            data["refunds"],
+            data["bank_credits"],
+        )
+
+        import tempfile, os
+        db_path = os.path.join(tempfile.mkdtemp(), "test_audit.db")
+        logger = AuditLogger(db_path)
+        try:
+            records = logger.log_batch("e2e_hash", results)
+            assert len(records) == 80
+
+            chain = logger.verify_chain("e2e_hash")
+            assert chain["valid"] is True
+            assert chain["total_records"] == 80
+            assert chain["broken_at"] is None
+        finally:
+            logger.close()
+            import shutil
+            shutil.rmtree(os.path.dirname(db_path), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# E2E: Human review flow
+# ---------------------------------------------------------------------------
+
+class TestE2EHumanReview:
+    def test_upload_pending_review_audit(self):
+        """Full flow: upload -> get pending -> review decision -> verify status."""
+        from backend.main import _jobs
+        from fastapi.testclient import TestClient
+        from backend.main import app
+        from tests.test_api import _make_upload_files
+
+        test_client = TestClient(app)
+        _jobs.clear()
+
+        data = generate_batch()
+        files = _make_upload_files(data)
+
+        # Upload
+        upload_resp = test_client.post("/upload", files=files)
+        assert upload_resp.status_code == 202
+        job_id = upload_resp.json()["job_id"]
+
+        # Get pending reviews
+        pending_resp = test_client.get("/api/review/pending")
+        assert pending_resp.status_code == 200
+        pending = pending_resp.json()
+
+        # If there are pending reviews, test submitting one
+        if pending["total_pending"] > 0:
+            sid = pending["settlements"][0]["settlement_id"]
+
+            # Submit review
+            review_resp = test_client.post(
+                f"/api/review/{sid}/decision",
+                params={"decision": "APPROVE", "reason": "E2E test", "reviewer_id": "e2e_test"},
+            )
+            assert review_resp.status_code == 200
+
+            # Check review status
+            status_resp = test_client.get(f"/api/review/{sid}")
+            assert status_resp.status_code == 200
+            assert status_resp.json()["reviewed"] is True

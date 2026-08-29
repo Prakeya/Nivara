@@ -99,12 +99,13 @@ class TestGenerateBatch:
         labels = [gt["label"] for gt in data["ground_truth"]]
         from collections import Counter
         dist = Counter(labels)
-        assert dist["clean_match"] == 30
+        assert dist["clean_match"] == 26
         assert dist["missing_reference"] == 5
         assert dist["bank_mismatch"] == 5
         assert dist["fee_mismatch"] == 5
         assert dist["tax_inconsistency"] == 3
         assert dist["refund_timing"] == 5
+        assert dist["duplicate_detection"] == 4
         assert dist["unexplained"] == 8
         assert dist["adjustment_entry"] == 5
         assert dist["refund_after_settlement"] == 5
