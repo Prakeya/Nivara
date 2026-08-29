@@ -1,10 +1,12 @@
 import os
+import pathlib
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def clean_audit_db():
-    """Remove persistent audit DB before each test to ensure clean state."""
-    db_path = os.path.join(os.path.dirname(__file__), "..", "data", "audit", "audit.db")
-    if os.path.exists(db_path):
-        os.remove(db_path)
+    """Remove persistent audit DB and its WAL/SHM files before each test."""
+    db_dir = pathlib.Path(__file__).resolve().parent.parent / "data" / "audit"
+    for suffix in ("", "-wal", "-shm"):
+        p = db_dir / f"audit.db{suffix}"
+        p.unlink(missing_ok=True)

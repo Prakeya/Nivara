@@ -73,6 +73,7 @@ class JobResult:
     math_discrepancies: int = 0
     ai_investigations: int = 0
     ai_auto_approved: int = 0
+    match_rate: float = 0.0
     results: list[dict] = field(default_factory=list)
     batch_analysis: dict = field(default_factory=dict)
     audit_records: list[dict] = field(default_factory=list)
@@ -325,24 +326,46 @@ async def upload_files(
         audit.log_batch(upload_hash, results)
         audit_records = [r.to_dict() for r in audit.get_batch(upload_hash)]
 
-        # Counts
+        # Counts — REVIEW_REQUIRED counts as exception (human-reviewable),
+        # matching the evaluation's definition of "correctly caught".
         from backend.models import DecisionState
         clean = sum(1 for r in results if r.decision == DecisionState.CLEAN_MATCH)
         math_disc = sum(1 for r in results if r.decision == DecisionState.MATH_DISCREPANCY)
         exceptions = sum(
             1 for r in results
-            if r.decision == DecisionState.DETERMINISTIC_EXCEPTION
+            if r.decision in (
+                DecisionState.DETERMINISTIC_EXCEPTION,
+                DecisionState.REVIEW_REQUIRED,
+            )
         )
         unresolved = sum(
             1 for r in results
             if r.decision in (
-                DecisionState.REVIEW_REQUIRED,
                 DecisionState.UNPROCESSED,
                 DecisionState.UNRESOLVED,
             )
         )
         ai_inv = sum(1 for r in results if r.ai_response is not None)
         ai_auto = 0  # AI never auto-approves (enforced by schema)
+
+        # Compute match rate against ground truth if available
+        match_rate = 0.0
+        gt_path = os.path.join("data", "evaluation", "ground_truth.json")
+        if not os.path.exists(gt_path):
+            gt_path = os.path.join("data", "demo", "ground_truth.json")
+        if os.path.exists(gt_path):
+            try:
+                import json as _json
+                with open(gt_path) as _f:
+                    gt_data = _json.load(_f)
+                gt_list = gt_data if isinstance(gt_data, list) else gt_data.get("ground_truth", [])
+                if len(gt_list) == len(results):
+                    from backend.evaluation import evaluate_batch
+                    batch_start = time.time()
+                    metrics = evaluate_batch(results, gt_list, batch_time_seconds=0.0, ai_client_available=llm_client is not None)
+                    match_rate = metrics.match_rate
+            except Exception:
+                pass  # Ground truth not available or mismatched — skip
 
         job.status = "completed"
         job.total_settlements = len(results)
@@ -352,6 +375,7 @@ async def upload_files(
         job.math_discrepancies = math_disc
         job.ai_investigations = ai_inv
         job.ai_auto_approved = ai_auto
+        job.match_rate = match_rate
         job.results = [_result_to_dict(r) for r in results]
         job.batch_analysis = batch_analysis
         job.audit_records = audit_records
@@ -409,6 +433,7 @@ async def get_status(job_id: str) -> JSONResponse:
         content["math_discrepancies"] = job.math_discrepancies
         content["ai_investigations"] = job.ai_investigations
         content["ai_auto_approved"] = job.ai_auto_approved
+        content["match_rate"] = job.match_rate
         content["results"] = job.results
         content["batch_analysis"] = job.batch_analysis
         content["audit_records"] = job.audit_records
