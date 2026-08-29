@@ -10,17 +10,24 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 import os
+import re
 import tempfile
 import uuid
+import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend.audit import AuditLogger
 from backend.batch_analyzer import analyze_batch
@@ -28,11 +35,23 @@ from backend.engine import run_engine
 from backend.ingestion import IngestionResult, ingest_csvs
 from backend.models import HumanReviewDecision, ResolutionStatus
 
+logger = logging.getLogger("nivara.api")
+
 app = FastAPI(
     title="Nivara",
     description="AI Settlement Intelligence Agent",
     version="0.1.0",
 )
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+CSV_MAGIC_BYTES = [b"application/csv", b"text/csv", b"application/vnd.ms-excel"]
+MAX_REVIEW_REASON_LENGTH = 2000
+MAX_REVIEWER_ID_LENGTH = 100
+MAX_JOBS = 10000
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +79,60 @@ class JobResult:
 
 
 _jobs: dict[str, JobResult] = {}
+
+# ---------------------------------------------------------------------------
+# Rate limiting (simple in-memory sliding window)
+# ---------------------------------------------------------------------------
+
+class _RateLimiter:
+    """Per-IP sliding window rate limiter."""
+
+    def __init__(self):
+        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._upload_limit = 100  # req per 60s
+        self._api_limit = 300  # req per 60s
+        self._window = 60.0
+
+    def _check(self, key: str, limit: int) -> bool:
+        now = time.time()
+        cutoff = now - self._window
+        self._hits[key] = [t for t in self._hits[key] if t > cutoff]
+        if len(self._hits[key]) >= limit:
+            return False
+        self._hits[key].append(now)
+        return True
+
+    def check_upload(self, ip: str) -> bool:
+        return self._check(f"upload:{ip}", self._upload_limit)
+
+    def check_api(self, ip: str) -> bool:
+        return self._check(f"api:{ip}", self._api_limit)
+
+_rate_limiter = _RateLimiter()
+
+
+# ---------------------------------------------------------------------------
+# Security headers middleware
+# ---------------------------------------------------------------------------
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from request."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -139,43 +212,84 @@ def _result_to_dict(r) -> dict:
 
 @app.post("/upload")
 async def upload_files(
+    request: Request,
     transactions: UploadFile = File(...),
     settlements: UploadFile = File(...),
     refunds: UploadFile = File(...),
     bank_credits: UploadFile = File(...),
 ) -> JSONResponse:
     """Accept 4 CSV files, process reconciliation, return job_id."""
+    # Rate limit check
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_upload(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
     job_id = str(uuid.uuid4())
     from datetime import timezone
     created_at = datetime.now(timezone.utc).isoformat()
 
-    # Save uploaded files to temp directory
-    tmp_dir = tempfile.mkdtemp()
-    file_paths = []
-    for upload_file, name in [
+    # Validate content types and file sizes before processing
+    upload_files_list = [
         (transactions, "transactions.csv"),
         (settlements, "settlements.csv"),
         (refunds, "refunds.csv"),
         (bank_credits, "bank_credits.csv"),
-    ]:
-        fp = Path(tmp_dir) / name
-        content = await upload_file.read()
-        fp.write_bytes(content)
-        file_paths.append(str(fp))
+    ]
 
-    upload_hash = _compute_hash(file_paths)
+    # Check file sizes and content types
+    for upload_file, name in upload_files_list:
+        # Validate content type header
+        ct = (upload_file.content_type or "").lower().strip()
+        if ct and ct not in ("text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream", ""):
+            raise HTTPException(
+                status_code=415,
+                detail=f"File '{name}' has unsupported content type: {ct}. Expected CSV.",
+            )
 
-    job = JobResult(
-        job_id=job_id,
-        status="processing",
-        upload_hash=upload_hash,
-        created_at=created_at,
-    )
-    _jobs[job_id] = job
-
+    # Save uploaded files to temp directory (cleaned up in finally block)
+    tmp_dir = tempfile.mkdtemp()
+    file_paths = []
     try:
-        # Ingest
-        ingestion: IngestionResult = ingest_csvs(
+        for upload_file, name in upload_files_list:
+            fp = Path(tmp_dir) / name
+            content = await upload_file.read()
+
+            # Validate file size (50MB limit)
+            if len(content) > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File '{name}' exceeds maximum size of {MAX_UPLOAD_SIZE // (1024*1024)}MB.",
+                )
+
+            # Validate content is text-based (not binary) by checking for null bytes
+            if b"\x00" in content[:8192]:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"File '{name}' appears to be binary, not a CSV text file.",
+                )
+
+            fp.write_bytes(content)
+            file_paths.append(str(fp))
+
+        upload_hash = _compute_hash(file_paths)
+
+        # Job eviction: cap at MAX_JOBS, evict oldest
+        if len(_jobs) >= MAX_JOBS:
+            oldest_ids = sorted(_jobs.keys(), key=lambda k: _jobs[k].created_at)[:len(_jobs) // 4]
+            for old_id in oldest_ids:
+                _jobs.pop(old_id, None)
+
+        job = JobResult(
+            job_id=job_id,
+            status="processing",
+            upload_hash=upload_hash,
+            created_at=created_at,
+        )
+        _jobs[job_id] = job
+
+        # Ingest (sync CSV parsing — offload to threadpool)
+        ingestion: IngestionResult = await asyncio.to_thread(
+            ingest_csvs,
             transactions_path=file_paths[0],
             settlements_path=file_paths[1],
             refunds_path=file_paths[2],
@@ -184,7 +298,8 @@ async def upload_files(
 
         # Run engine with real LLM client (or None if no API key)
         llm_client = _get_llm_client()
-        results = run_engine(
+        results = await asyncio.to_thread(
+            run_engine,
             transactions=ingestion.transactions,
             settlements=ingestion.settlements,
             refunds=ingestion.refunds,
@@ -193,7 +308,7 @@ async def upload_files(
         )
 
         # Batch analysis
-        patterns = analyze_batch(results)
+        patterns = await asyncio.to_thread(analyze_batch, results)
         batch_analysis = [
             {
                 "pattern_type": p.pattern_type,
@@ -241,9 +356,18 @@ async def upload_files(
         job.batch_analysis = batch_analysis
         job.audit_records = audit_records
 
+    except HTTPException:
+        raise  # Let HTTP exceptions propagate as-is
     except Exception as exc:
-        job.status = "error"
-        job.error = str(exc)
+        logger.exception("Upload processing failed for job %s", job_id)
+        job = _jobs.get(job_id)
+        if job:
+            job.status = "error"
+            job.error = "An internal error occurred during processing. Check server logs for details."
+    finally:
+        # Clean up temp directory
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return JSONResponse(
         status_code=202,
@@ -258,6 +382,12 @@ async def upload_files(
 @app.get("/status/{job_id}")
 async def get_status(job_id: str) -> JSONResponse:
     """Return processing status and results for a job."""
+    # Validate job_id format (UUID)
+    try:
+        uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid job ID format: {job_id}")
+
     job = _jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
@@ -270,7 +400,7 @@ async def get_status(job_id: str) -> JSONResponse:
     }
 
     if job.status == "error":
-        content["error"] = job.error
+        content["error"] = job.error  # Already sanitized in upload handler
     elif job.status == "completed":
         content["total_settlements"] = job.total_settlements
         content["clean_matches"] = job.clean_matches
@@ -297,6 +427,10 @@ async def get_status(job_id: str) -> JSONResponse:
 async def get_audit(upload_hash: str) -> JSONResponse:
     """Return all audit records for a given upload hash.
     Reads directly from the persistent SQLite database."""
+    # Validate upload_hash format (64-char hex SHA-256)
+    if not re.fullmatch(r"[0-9a-f]{64}", upload_hash):
+        raise HTTPException(status_code=400, detail=f"Invalid upload hash format: {upload_hash}")
+
     audit = _get_audit_logger()
     records = audit.get_batch(upload_hash)
     if not records:
@@ -317,6 +451,10 @@ async def get_audit(upload_hash: str) -> JSONResponse:
 async def get_settlement(settlement_id: str) -> JSONResponse:
     """Return audit history for a settlement across all batches.
     Reads directly from the persistent SQLite database."""
+    # Validate settlement_id format (SETL_NNNN pattern)
+    if not re.fullmatch(r"SETL_\d{4,}", settlement_id):
+        raise HTTPException(status_code=400, detail=f"Invalid settlement ID format: {settlement_id}")
+
     audit = _get_audit_logger()
     history = audit.get_settlement_history(settlement_id)
 
@@ -346,6 +484,7 @@ _human_reviews: dict[str, HumanReviewDecision] = {}
 
 @app.post("/api/review/{settlement_id}/decision")
 async def submit_human_review(
+    request: Request,
     settlement_id: str,
     decision: str,
     reason: str,
@@ -356,6 +495,17 @@ async def submit_human_review(
     Decision must be one of: APPROVE, REJECT, MODIFY.
     Updates resolution_status to RESOLVED_BY_HUMAN or REJECTED.
     """
+    # Rate limit check
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_api(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
+    # Validate parameter lengths
+    if len(reason) > MAX_REVIEW_REASON_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Reason exceeds maximum length of {MAX_REVIEW_REASON_LENGTH} characters.")
+    if len(reviewer_id) > MAX_REVIEWER_ID_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Reviewer ID exceeds maximum length of {MAX_REVIEWER_ID_LENGTH} characters.")
+
     valid_decisions = {"APPROVE", "REJECT", "MODIFY"}
     if decision.upper() not in valid_decisions:
         raise HTTPException(
@@ -401,8 +551,11 @@ async def submit_human_review(
 
 
 @app.get("/api/review/pending")
-async def get_pending_reviews() -> JSONResponse:
+async def get_pending_reviews(request: Request) -> JSONResponse:
     """List all settlements pending human review across all jobs."""
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_api(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
     pending = []
     for job in _jobs.values():
         if job.status != "completed":
@@ -439,8 +592,11 @@ async def get_pending_reviews() -> JSONResponse:
 
 
 @app.get("/api/review/{settlement_id}")
-async def get_review_status(settlement_id: str) -> JSONResponse:
+async def get_review_status(request: Request, settlement_id: str) -> JSONResponse:
     """Get the review status and audit trail for a specific settlement."""
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_api(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
     review = _human_reviews.get(settlement_id)
 
     # Look up in job results for full context
@@ -483,6 +639,6 @@ app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
+def serve_index():
     index_path = _frontend_dir / "index.html"
     return HTMLResponse(content=index_path.read_text())

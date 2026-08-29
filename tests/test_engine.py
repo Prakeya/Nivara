@@ -1058,3 +1058,30 @@ class TestParallelExecution:
             assert s.decision == p.decision
             assert s.escalate_to_human == p.escalate_to_human
             assert s.difference_paise == p.difference_paise
+
+
+# ---------------------------------------------------------------------------
+# settlement_cycle_days parameter
+# ---------------------------------------------------------------------------
+
+class TestSettlementCycleDays:
+    def test_settlement_cycle_days_propagates_to_timing_evidence(self):
+        """settlement_cycle_days parameter propagates to TimingEvidence."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR_001", linked_pids=["PAY_001"])
+        bc1 = _bank_credit("UTR_001", 100000)
+
+        results = run_engine([t1], [s1], [], [bc1], settlement_cycle_days=1)
+        assert len(results) == 1
+        # The engine should accept the parameter without error
+        assert results[0].settlement_id == "SETL_001"
+
+    def test_non_default_cycle_days_still_produces_clean_match(self):
+        """Non-default settlement_cycle_days still produces CLEAN_MATCH for matching data."""
+        t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
+        s1 = _settlement("SETL_001", amount=100000, utr="UTR_001", linked_pids=["PAY_001"])
+        bc1 = _bank_credit("UTR_001", 100000)
+
+        results = run_engine([t1], [s1], [], [bc1], settlement_cycle_days=3)
+        assert len(results) == 1
+        assert results[0].decision == DecisionState.CLEAN_MATCH

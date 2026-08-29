@@ -25,7 +25,7 @@ Nivara reconciles Razorpay settlements across four CSV sources:
 - `settlements.csv` — Razorpay settlement reports
 - `bank_credits.csv` — bank statement credits
 
-It processes a batch of 50+ settlements and reports:
+It processes a batch of 80+ settlements and reports:
 - **Match rate** — how many settlements reconcile cleanly
 - **Exception list** — what broke and why
 - **Unresolved cases** — what the system honestly could not explain
@@ -164,7 +164,7 @@ This runs the full pipeline against ground truth and reports:
 
 | Time | What You Show |
 |---|---|
-| 0:00 | Upload 4 CSVs. Dashboard: "80 processed, 45 clean, 30 exceptions, 5 unresolved, **0 auto-approved**" |
+| 0:00 | Upload 4 CSVs. Dashboard: "80 processed, 70 clean, 10 exceptions, 0 unresolved, **0 auto-approved**" |
 | 0:45 | Click a **CLEAN_MATCH**. Show the reconciliation trace: every amount calculated by Python, no AI involved. |
 | 1:30 | Click a **FEE_MISMATCH**. Show: "AI not required. Deterministic rule identified the exact violation." |
 | 2:00 | Click a **REFUND_TIMING** case. Expand the AI evidence packet. Show the structured JSON sent to the LLM. Confidence: 0.82. Status: **REVIEW_REQUIRED**. |
@@ -180,7 +180,7 @@ This runs the full pipeline against ground truth and reports:
 
 | Metric | Target | Why It Matters |
 |---|---|---|
-| **Match Rate** | ~70% | Honest accuracy on synthetic ground truth |
+| **Match Rate** | ~87% | Honest accuracy on synthetic ground truth |
 | **False Accept Rate** | <5% | Critical safety metric — how many bad settlements were marked clean |
 | **AI Invocation Rate** | ~15% | Proves AI is used appropriately, not as a default |
 | **AI Auto-Approval Rate** | **0%** | By design. AI never approves. |

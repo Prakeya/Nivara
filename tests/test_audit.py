@@ -382,3 +382,113 @@ class TestIntegration:
         assert total_from_counts == 80
 
         logger.close()
+
+
+# ---------------------------------------------------------------------------
+# Hash chain integrity tests
+# ---------------------------------------------------------------------------
+
+class TestHashChain:
+    def test_compute_record_hash_deterministic(self):
+        from backend.audit import _compute_record_hash
+        h1 = _compute_record_hash('{"key": "value"}', None)
+        h2 = _compute_record_hash('{"key": "value"}', None)
+        assert h1 == h2
+        assert len(h1) == 64  # SHA-256 hex digest
+
+    def test_compute_record_hash_varies_with_prev(self):
+        from backend.audit import _compute_record_hash
+        h1 = _compute_record_hash('{"key": "value"}', None)
+        h2 = _compute_record_hash('{"key": "value"}', "abc123")
+        assert h1 != h2
+
+    def test_verify_chain_valid(self, tmp_path):
+        db_path = str(tmp_path / "audit.db")
+        logger = AuditLogger(db_path)
+        try:
+            results = [
+                _make_result("SETL_001", DecisionState.CLEAN_MATCH),
+                _make_result("SETL_002", DecisionState.DETERMINISTIC_EXCEPTION),
+                _make_result("SETL_003", DecisionState.MATH_DISCREPANCY),
+            ]
+            logger.log_batch("hash_abc", results)
+            chain = logger.verify_chain("hash_abc")
+            assert chain["valid"] is True
+            assert chain["total_records"] == 3
+            assert chain["broken_at"] is None
+        finally:
+            logger.close()
+
+    def test_verify_chain_empty_batch(self, tmp_path):
+        db_path = str(tmp_path / "audit.db")
+        logger = AuditLogger(db_path)
+        try:
+            chain = logger.verify_chain("nonexistent_hash")
+            assert chain["valid"] is True
+            assert chain["total_records"] == 0
+        finally:
+            logger.close()
+
+    def test_verify_chain_tampered_record(self, tmp_path):
+        db_path = str(tmp_path / "audit.db")
+        logger = AuditLogger(db_path)
+        try:
+            results = [
+                _make_result("SETL_001", DecisionState.CLEAN_MATCH),
+                _make_result("SETL_002", DecisionState.CLEAN_MATCH),
+            ]
+            logger.log_batch("hash_abc", results)
+
+            # Tamper with a record's payload in the database
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "UPDATE audit_log SET payload_json = ? WHERE settlement_id = ?",
+                ('{"tampered": true}', "SETL_001"),
+            )
+            conn.commit()
+            conn.close()
+
+            chain = logger.verify_chain("hash_abc")
+            assert chain["valid"] is False
+            assert chain["broken_at"] == 0
+            assert chain["settlement_id"] == "SETL_001"
+        finally:
+            logger.close()
+
+    def test_verify_chain_in_memory_valid(self):
+        logger = InMemoryAuditLogger()
+        results = [
+            _make_result("SETL_001", DecisionState.CLEAN_MATCH),
+            _make_result("SETL_002", DecisionState.CLEAN_MATCH),
+        ]
+        logger.log_batch("hash_abc", results)
+        chain = logger.verify_chain("hash_abc")
+        assert chain["valid"] is True
+        assert chain["total_records"] == 2
+
+    def test_verify_chain_in_memory_tampered(self):
+        logger = InMemoryAuditLogger()
+        results = [
+            _make_result("SETL_001", DecisionState.CLEAN_MATCH),
+            _make_result("SETL_002", DecisionState.CLEAN_MATCH),
+        ]
+        logger.log_batch("hash_abc", results)
+
+        # Tamper with in-memory record
+        logger.records[0].payload_json = '{"tampered": true}'
+        chain = logger.verify_chain("hash_abc")
+        assert chain["valid"] is False
+        assert chain["broken_at"] == 0
+
+    def test_verify_chain_continuity(self, tmp_path):
+        db_path = str(tmp_path / "audit.db")
+        logger = AuditLogger(db_path)
+        try:
+            results = [_make_result(f"SETL_{i:03d}", DecisionState.CLEAN_MATCH) for i in range(5)]
+            logger.log_batch("hash_abc", results)
+            chain = logger.verify_chain("hash_abc")
+            assert chain["valid"] is True
+            assert chain["total_records"] == 5
+        finally:
+            logger.close()

@@ -291,6 +291,7 @@ The engine is **authoritative**. It never delegates math to the AI.
 9. Amount cross-check
 10. Expected amount calculation
 11. Difference calculation
+12. Adjustment consistency (when adjustments present)
 
 ### Outcomes
 
@@ -450,16 +451,20 @@ CREATE TABLE audit_log (
 
 ```python
 dataset = generate_batch(
-    n_settlements=60,
+    n_settlements=80,
     edge_cases={
-        "clean_match": 30,
+        "clean_match": 26,
         "missing_reference": 5,
-        "duplicate_settlement": 2,
         "bank_mismatch": 5,
         "fee_mismatch": 5,
         "tax_inconsistency": 3,
         "refund_timing": 5,
-        "unexplained": 5
+        "duplicate_detection": 4,
+        "adjustment_entry": 5,
+        "refund_after_settlement": 5,
+        "timing_race": 5,
+        "partial_settlement": 4,
+        "unexplained": 8,
     }
 )
 ```
@@ -477,7 +482,7 @@ dataset = generate_batch(
 
 ### Honest Reporting Template
 
-> "We generated 60 settlements with known ground truth. The system correctly handled 43 (71.7% match rate). It escalated 14 to human review. It falsely accepted 2 settlements as clean when they had exceptions (5.0% false accept rate). AI was invoked on 8 settlements (13.3%). All AI-investigated discrepancies were flagged for human review; zero were auto-approved. Batch processed in 48 seconds (0.8s per settlement)."
+> "We generated 80 settlements with known ground truth. The system correctly handled 70 (87.5% match rate). It escalated 40 to human review. It falsely accepted 10 settlements as clean when they had exceptions (12.5% false accept rate). 10 false negatives are from known engine blind spots (5 refund_after_settlement, 5 timing_race). All AI-investigated discrepancies were flagged for human review; zero were auto-approved. Batch processed in 0.09 seconds (0.001s per settlement, 883 settlements/sec)."
 
 ---
 
@@ -511,7 +516,7 @@ nivara/
 │   ├── test_models.py
 │   ├── test_ingestion.py
 │   ├── test_engine.py
-│   ├── test_ai.py
+│   ├── test_ai_investigator.py
 │   ├── test_batch_analysis.py
 │   └── test_e2e.py
 ├── requirements.txt
@@ -553,7 +558,7 @@ nivara/
 | **2** | Valid CSV accepted. Invalid rejected with line numbers. Duplicate upload returns cached result. Encoding handled. |
 | **3** | Dates ISO 8601. Amounts integer paise. Orphans, overclaims, mismatches detected. Bank linking by UTR + fallback works. |
 | **4** | Hand-calculate 20 settlements. Engine matches exactly. Every deterministic exception triggers. Crash returns UNPROCESSED. |
-| **5** | Generator produces all 8 edge cases. Ground truth labels correct. |
+| **5** | Generator produces all 12 edge cases. Ground truth labels correct. |
 | **6** | Evaluation harness scores batch correctly. False accept rate calculable. |
 | **7** | LLM timeout → UNRESOLVED. Hallucinated evidence → UNRESOLVED. Valid evidence → correct classification. AI cannot alter expected_amount. |
 | **8** | Batch analyzer detects at least one pattern on synthetic data. |
@@ -658,7 +663,7 @@ Difference             ₹1,775    ← Calculated by: Deterministic Engine ✓
 | 3:45 | Show Safety Guarantees | "AI never calculates, never approves, never invents evidence." |
 | 4:00 | Show Batch Patterns | "3 settlements on Aug 20 show 1-paise fee mismatches. Suggest reviewing fee rounding rule." |
 | 4:30 | Show Audit Trail | Full JSON snapshot, timestamp, upload_hash, human action |
-| 4:45 | Show Evaluation | "Ground truth: 60 labeled. Match rate 71.7%. False accept 5.0%. 0 auto-approved." |
+| 4:45 | Show Evaluation | "Ground truth: 80 labeled. Match rate 87.5%. False accept 12.5%. 0 auto-approved." |
 
 ---
 

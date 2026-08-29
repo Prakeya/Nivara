@@ -6,7 +6,7 @@ Prepared answers to likely judge-attack questions for Razorpay Buildathon 2026, 
 
 ## 1. "Why do you need an LLM at all? Couldn't this all be deterministic?"
 
-**The 11 deterministic checks catch what can be mathematically proven.** References, fees, taxes, bank credits, UTRs, amounts — these are all verifiable with integer arithmetic. No LLM needed.
+**The 12 deterministic checks catch what can be mathematically proven.** References, fees, taxes, bank credits, UTRs, amounts — these are all verifiable with integer arithmetic. No LLM needed.
 
 **The LLM provides natural language classification of exception patterns to reduce human review time. It does not approve transactions.**
 

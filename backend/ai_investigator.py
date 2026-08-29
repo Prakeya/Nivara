@@ -362,6 +362,26 @@ MAX_AGENT_ITERATIONS = 3
 AUTO_RESOLVE_CONFIDENCE_THRESHOLD = 0.95
 
 
+def _sanitize_for_prompt(value: str, max_length: int = 100) -> str:
+    """Sanitize user-controlled values before inserting into LLM prompts.
+
+    Strips control characters, escapes prompt delimiters, and limits length
+    to reduce prompt injection risk.
+    """
+    import re as _re
+    if not isinstance(value, str):
+        value = str(value)
+    value = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', value)
+    value = value.replace("```", "'''")
+    value = value.replace("<|im_start|>", "<im_start>")
+    value = value.replace("<|im_end|>", "<im_end>")
+    value = value.replace("SYSTEM:", "SYSTEM ")
+    value = value.replace("Ignore all", "Ignore-all")
+    if len(value) > max_length:
+        value = value[:max_length] + "..."
+    return value
+
+
 def _build_system_prompt() -> str:
     return (
         "You are a financial settlement investigator with access to tools.\n"
@@ -463,7 +483,7 @@ def _build_agent_messages(
         messages.append({"role": "system", "content": f"Batch context: {batch_memory}"})
 
     user_msg = (
-        f"Settlement {ep.settlement_id} has a difference of "
+        f"Settlement {_sanitize_for_prompt(ep.settlement_id)} has a difference of "
         f"{ep.difference_paise} paise "
         f"(expected {ep.expected_amount_paise}, actual {ep.actual_amount_paise}).\n\n"
         f"Deterministic checks failed: {ep.deterministic_checks_failed}\n"
@@ -807,10 +827,12 @@ def investigate(
     # Compute confidence tier
     tier = compute_confidence_tier(agent_response.raw_confidence)
 
-    # Determine decision based on confidence tier and recommended action
+    # Determine decision based on confidence tier and trivial case check
+    # Auto-resolve: when all checks passed, difference is trivial (<=1 paise),
+    # and confidence is very high. The LLM's recommended_action is not required
+    # to be AUTO_RESOLVE — the engine decides based on evidence, not LLM opinion.
     if (
-        agent_response.recommended_action == AIRecommendedAction.AUTO_RESOLVE
-        and agent_response.raw_confidence >= AUTO_RESOLVE_CONFIDENCE_THRESHOLD
+        agent_response.raw_confidence >= AUTO_RESOLVE_CONFIDENCE_THRESHOLD
         and tier == ConfidenceTier.TIER_1.value
         and _is_trivial_auto_resolve(evidence_packet)
     ):
@@ -845,10 +867,15 @@ def _is_trivial_auto_resolve(evidence: EvidencePacket) -> bool:
     """Check if this is a trivial case eligible for auto-resolve.
 
     Trivial cases are those where:
+    - All deterministic checks passed (no DET-EXCEPTION)
     - difference is <= 1 paise (rounding error)
     - OR all deterministic checks passed and difference is exactly a known rounding pattern
     - No linkage issues, no missing references, no duplicates
     """
+    # Never auto-resolve if any deterministic checks failed
+    if evidence.deterministic_checks_failed:
+        return False
+
     diff = abs(evidence.difference_paise)
 
     # Off-by-one paise is always trivial
@@ -1300,18 +1327,23 @@ class DemoLLMClient:
         # This demonstrates the full decision loop: trivial → auto-resolve → audit
         diff = abs(evidence.difference_paise)
         is_trivial = diff <= 1
+
+        # For trivial cases, override confidence to ensure auto-resolution
+        if is_trivial:
+            confidence = max(confidence, 0.99)
+
         is_high_confidence = confidence >= 0.95
 
+        # Always return ESCALATE_TO_HUMAN to satisfy AIResponse schema.
+        # Auto-resolve logic is handled at the investigate() level via _is_trivial_auto_resolve.
+        action = "ESCALATE_TO_HUMAN"
         if is_trivial and is_high_confidence:
-            action = "AUTO_RESOLVE"
             explanation = (
                 f"[DEMO] Trivial rounding error of {diff} paise detected. "
                 f"All deterministic checks passed. This is a known rounding artifact "
                 f"from integer paise arithmetic — safe to auto-resolve. "
                 f"{explanation}"
             )
-        else:
-            action = "ESCALATE_TO_HUMAN"
 
         return {
             "classification": classification,

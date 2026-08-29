@@ -415,7 +415,7 @@ python3 demo.py
 
 This will:
 1. Generate 80 synthetic settlements with ground truth
-2. Run the full test suite (482 tests)
+2. Run the full test suite (505 tests)
 3. Ingest → Link → Reconcile → AI Investigate → Evaluate
 4. Print match rate, per-class F1, and throughput
 
@@ -502,7 +502,7 @@ The synthetic evaluation dataset contains **80 labeled settlements** across 11 e
 | Unexplained              |     8 | Caught — MATH_DISCREPANCY (all checks pass, diff≠0)   |
 | **Total**                | **80** |                                                      |
 
-**11 edge-case categories** include 4 that the engine cannot catch (refund_after_settlement, timing_race) — these are deliberate blind spots that expose where the deterministic engine needs LLM or additional checks.
+**11 edge-case categories** include 2 that the engine cannot catch (refund_after_settlement, timing_race) — these are deliberate blind spots that expose where the deterministic engine needs LLM or additional checks.
 
 ---
 
@@ -523,7 +523,7 @@ Nivara uses a **confusion matrix** approach against known ground-truth labels:
 
 ## Honest Limitations
 
-**The dataset is synthetic and co-designed with the engine.** The generator produces edge cases that map to the engine's 11 deterministic checks. A 100% match rate on this dataset would mean the engine catches every case it was built to catch — which is expected, not impressive.
+**The dataset is synthetic and co-designed with the engine.** The generator produces edge cases that map to the engine's 12 deterministic checks. A 100% match rate on this dataset would mean the engine catches every case it was built to catch — which is expected, not impressive.
 
 **The match rate is deliberately NOT 100%.** We included two categories of engine blind spots:
 

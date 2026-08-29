@@ -106,7 +106,7 @@ def _make_evidence(
             expected_cycle_days=2,
         ),
         deterministic_checks_passed=passed_checks or ["schema_validation", "fee_validation"],
-        deterministic_checks_failed=failed_checks or ["MATH_DISCREPANCY"],
+        deterministic_checks_failed=failed_checks if failed_checks is not None else [],
         payment_details=payment_details or [],
         cross_settlement=cross_settlement,
     )

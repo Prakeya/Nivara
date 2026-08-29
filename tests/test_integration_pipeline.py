@@ -7,6 +7,7 @@ Tests the chain: EvidencePacket → Agent Loop → InvestigationResult → Recon
 
 import json
 import time
+from datetime import date, datetime
 
 import pytest
 
@@ -71,12 +72,12 @@ def _make_packet(
             validation_result=ValidationResult.PASSED,
         ),
         bank_credit=BankCreditEvidence(
-            utr="UTR_INT", amount_paise=actual, date=__import__("datetime").date(2026, 8, 22),
+            utr="UTR_INT", amount_paise=actual, date=date(2026, 8, 22),
         ),
         timing=TimingEvidence(
-            settlement_created_at=__import__("datetime").datetime(2026, 8, 20, 10, 0, 0),
-            settled_at=__import__("datetime").datetime(2026, 8, 21, 8, 0, 0),
-            bank_credited_at=__import__("datetime").datetime(2026, 8, 22, 14, 30, 0),
+            settlement_created_at=datetime(2026, 8, 20, 10, 0, 0),
+            settled_at=datetime(2026, 8, 21, 8, 0, 0),
+            bank_credited_at=datetime(2026, 8, 22, 14, 30, 0),
             expected_cycle_days=2,
         ),
         deterministic_checks_passed=["schema_validation", "fee_validation"],
@@ -221,7 +222,7 @@ class TestEngineToEvaluation:
         assert metrics.match_rate >= 0.80
         assert metrics.throughput_per_second >= 1000
         assert metrics.ai_auto_approval_rate_pct == 0.0
-        assert len(metrics.label_counts) == 11
+        assert len(metrics.label_counts) == 12
 
     def test_per_class_metrics_present(self):
         ing = ingest_csvs(
@@ -239,11 +240,11 @@ class TestEngineToEvaluation:
         )
         metrics = evaluate_batch(results, gt, batch_time_seconds=0.01)
 
-        # All 11 classes should have metrics
+        # All 12 classes should have metrics
         for label in [
             "clean_match", "missing_reference", "bank_mismatch",
             "fee_mismatch", "tax_inconsistency", "refund_timing",
-            "adjustment_entry", "partial_settlement",
+            "duplicate_detection", "adjustment_entry", "partial_settlement",
             "refund_after_settlement", "timing_race", "unexplained",
         ]:
             assert label in metrics.class_metrics, f"Missing class metrics for {label}"

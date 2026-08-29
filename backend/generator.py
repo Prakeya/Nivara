@@ -804,7 +804,7 @@ def _gen_duplicate_utr(
     rng: random.Random,
     base_date: datetime,
 ) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
-    """Duplicate UTR: shares UTR_0001 with first clean_match. Triggers duplicate_detection."""
+    """Duplicate UTR: pairs of settlements share the same UTR. Triggers duplicate_detection."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
     amount = _random_amount(rng)
@@ -812,14 +812,17 @@ def _gen_duplicate_utr(
     created_at = _ts(base_date, rng, 24)
     t = _make_transaction(pid, amount, method, created_at, settlement_id=sid)
     expected = _settlement_amount([{"amount": t["amount"], "fee": t["fee"], "tax": t["tax"]}], [])
-    utr = "UTR_0001"  # duplicate of first clean_match
+    # Pair duplicate cases: even/odd indices share a UTR (UTR_DUP_001, UTR_DUP_002, ...)
+    # This ensures the engine's cross-file UTR check catches the duplicates.
+    pair_idx = (idx // 2) % 2 + 1  # produces 1 or 2, cycling per pair
+    utr = f"UTR_DUP_{pair_idx:03d}"
     s_created = _ts(base_date, rng, 12)
     s_settled = s_created + timedelta(hours=12)
     settlement = _make_settlement(sid, expected, utr, s_created, s_settled, [pid], [])
     bank_credit = _make_bank_credit(utr, expected, s_settled.date())
     gt = {
         "settlement_id": sid,
-        "label": "duplicate_utr",
+        "label": "duplicate_detection",
         "expected_amount_paise": expected,
         "actual_amount_paise": expected,
         "difference_paise": 0,
@@ -953,22 +956,23 @@ def generate_batch(
 
     Returns dict with keys: settlements, transactions, refunds, bank_credits, ground_truth.
 
-    The dataset includes 11 edge case categories:
+    The dataset includes 12 edge case categories:
     - 4 easily caught by the deterministic engine (missing_reference, bank_mismatch,
       fee_mismatch, tax_inconsistency)
-    - 3 caught by the engine but testing different detection paths (refund_timing,
-      same_day_duplicates, partial_settlement)
+    - 4 caught by the engine but testing different detection paths (refund_timing,
+      duplicate_detection, partial_settlement, unexplained)
     - 4 genuinely ambiguous cases that test the engine's blind spots (adjustment_entry,
-      refund_after_settlement, timing_race, unexplained)
+      refund_after_settlement, timing_race, bank_mismatch)
     """
     if edge_cases is None:
         edge_cases = {
-            "clean_match": 30,
+            "clean_match": 26,
             "missing_reference": 5,
             "bank_mismatch": 5,
             "fee_mismatch": 5,
             "tax_inconsistency": 3,
             "refund_timing": 5,
+            "duplicate_detection": 4,
             "adjustment_entry": 5,
             "refund_after_settlement": 5,
             "timing_race": 5,
@@ -1003,7 +1007,17 @@ def generate_batch(
         all_ground_truth.append(gt)
         idx += 1
 
-    # 2. Missing references
+    # 2. Duplicate detection (shares UTR_0001 with first clean_match)
+    for _ in range(edge_cases.get("duplicate_detection", 0)):
+        s, txns, refs, bcs, gt = _gen_duplicate_utr(idx, rng, base_date)
+        all_settlements.append(s)
+        all_transactions.extend(txns)
+        all_refunds.extend(refs)
+        all_bank_credits.extend(bcs)
+        all_ground_truth.append(gt)
+        idx += 1
+
+    # 3. Missing references
     for _ in range(edge_cases.get("missing_reference", 0)):
         s, txns, refs, bcs, gt = _gen_missing_reference(idx, rng, base_date)
         all_settlements.append(s)
@@ -1203,15 +1217,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Default distribution — 11 edge case categories
-    # 4 easily caught, 3 caught via different paths, 4 genuinely ambiguous
+    # Default distribution — 12 edge case categories
+    # 4 easily caught, 4 caught via different paths, 4 genuinely ambiguous
     edge_cases = {
-        "clean_match": 30,
+        "clean_match": 26,
         "missing_reference": 5,
         "bank_mismatch": 5,
         "fee_mismatch": 5,
         "tax_inconsistency": 3,
         "refund_timing": 5,
+        "duplicate_detection": 4,
         "adjustment_entry": 5,
         "refund_after_settlement": 5,
         "timing_race": 5,

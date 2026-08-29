@@ -4,7 +4,7 @@ Nivara — AI Finance Controller Demo
 
 One-command end-to-end run:
   1. Generate 80 synthetic settlements with ground truth
-  2. Run full test suite (465+ tests)
+  2. Run full test suite (505+ tests)
   3. Ingest → Link → Reconcile → AI Investigate → Evaluate
   4. Print evaluation report with match rate, per-class F1, throughput
 
@@ -19,6 +19,7 @@ import sys
 import time
 
 
+# Commands are hardcoded; no user input reaches subprocess.
 def run(cmd: list[str], desc: str, check: bool = True) -> subprocess.CompletedProcess:
     print(f"\n{'='*60}")
     print(f"  {desc}")
@@ -120,7 +121,7 @@ def main() -> int:
     print(f"  Match rate:      {metrics.match_rate:.1%}")
     print(f"  False accept:    {metrics.false_accept_rate:.1%}")
     print(f"  Throughput:      {metrics.throughput_per_second:,.0f} settlements/sec")
-    print(f"  Tests:           465+ passed")
+    print(f"  Tests:           505+ passed")
     print(f"  Audit:           Append-only SQLite")
     print(f"  Human review:    POST /api/review/{{id}}/decision")
     print(f"  Agent trace:     ReAct loop, 6 tools, max 3 iterations")

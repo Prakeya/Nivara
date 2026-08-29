@@ -136,6 +136,22 @@ def parse_json_list(value: str) -> list[str]:
         raise ValueError(f"Invalid JSON array: {value}")
 
 
+def sanitize_csv_field(value: Optional[str]) -> Optional[str]:
+    """Sanitize a string field against CSV formula injection.
+
+    Strips leading characters that trigger formula execution in spreadsheet apps
+    (=, +, -, @, |, \\t, \\r). Prefixes with a single quote if needed.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    stripped = value.lstrip()
+    if stripped and stripped[0] in ("=", "+", "-", "@", "|", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 # ---------------------------------------------------------------------------
 # Validation error types
 # ---------------------------------------------------------------------------
@@ -293,7 +309,7 @@ def validate_transactions(df: pd.DataFrame, start_line: int = 2) -> ValidationRe
                 "method": str(row["method"]).lower(),
                 "fee": fee,
                 "tax": tax,
-                "customer_email": str(row.get("customer_email", "")) if pd.notna(row.get("customer_email")) else None,
+                "customer_email": sanitize_csv_field(str(row.get("customer_email", "")) if pd.notna(row.get("customer_email")) else None),
                 "created_at": created_at,
                 "settlement_id": str(row["settlement_id"]) if pd.notna(row.get("settlement_id")) else None,
             })
@@ -502,7 +518,7 @@ def validate_bank_credits(df: pd.DataFrame, start_line: int = 2) -> ValidationRe
                 "utr": str(row["utr"]) if pd.notna(row.get("utr")) else None,
                 "amount": amount,
                 "date": bank_date.date(),
-                "description": str(row.get("description", "")) if pd.notna(row.get("description")) else None,
+                "description": sanitize_csv_field(str(row.get("description", "")) if pd.notna(row.get("description")) else None),
                 "bank_account": str(row.get("bank_account", "")) if pd.notna(row.get("bank_account")) else None,
             })
 
