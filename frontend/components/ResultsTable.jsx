@@ -3,8 +3,9 @@ function HeroMetrics({ status }) {
   const aiRate = status.total_settlements > 0
     ? ((status.ai_investigations / status.total_settlements) * 100).toFixed(1)
     : "0.0";
+  // Match rate = correctly handled (clean + exceptions caught) / total
   const matchRate = status.total_settlements > 0
-    ? ((status.clean_matches / status.total_settlements) * 100).toFixed(1)
+    ? (((status.clean_matches + status.exceptions) / status.total_settlements) * 100).toFixed(1)
     : "0.0";
 
   return (
