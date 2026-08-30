@@ -1,11 +1,14 @@
 """
-Fallback Chain: OpenAI → Anthropic → Local provider fallback.
+Fallback Chain: Groq primary (llama-3.1-70b-versatile) → Groq fallback
+(llama-3.1-8b-instant) → UNRESOLVED.
 
 Rules:
-- Try providers in order. First success wins.
-- Uses existing circuit breaker per provider.
-- If all providers fail → return None (no heuristic fallback).
-- Exponential backoff between retries.
+- Pre-flight via GroqRateLimiter (requests/min, tokens/min, daily budget).
+- Try the 70B model first with a 15s timeout.
+- On failure (timeout, rate limit, daily limit, API error, unparsable JSON)
+  retry ONCE with the 8B model.
+- Second failure → success=False → UNRESOLVED → human review.
+- No third-party providers. No heuristic fallback (never guess conclusions).
 """
 
 from __future__ import annotations
@@ -16,30 +19,32 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from backend.circuit_breaker import get_breaker, CircuitState
+from backend.circuit_breaker import get_breaker
+from backend.groq_client import (
+    DEFAULT_MODEL,
+    FALLBACK_MODEL,
+    GroqClient,
+    GroqError,
+    GroqRateLimiter,
+    parse_llm_json,
+)
 
 logger = logging.getLogger("nivara.fallback_chain")
+
+# Groq primary → fallback model order
+PRIMARY_MODEL = DEFAULT_MODEL
+SECONDARY_MODEL = FALLBACK_MODEL
+
+DEFAULT_TIMEOUT = 15.0
 
 
 @dataclass
 class ProviderConfig:
-    """Configuration for a single LLM provider."""
+    """Configuration for a single LLM provider (Groq-first)."""
 
-    name: str
-    api_key_env: str
-    base_url: str | None = None
-    timeout: float = 30.0
-    max_retries: int = 2
-    base_delay: float = 1.0
-    max_delay: float = 30.0
-
-
-# Default provider order
-DEFAULT_PROVIDERS = [
-    ProviderConfig(name="openai", api_key_env="OPENAI_API_KEY"),
-    ProviderConfig(name="anthropic", api_key_env="ANTHROPIC_API_KEY"),
-    ProviderConfig(name="local", api_key_env="", base_url="http://localhost:11434"),
-]
+    name: str = "groq"
+    api_key_env: str = "GROQ_API_KEY"
+    timeout: float = DEFAULT_TIMEOUT
 
 
 @dataclass
@@ -51,70 +56,106 @@ class FallbackResult:
     latency_ms: int = 0
     success: bool = False
     error: str | None = None
+    model: str | None = None
 
 
-def _call_provider(
-    provider: ProviderConfig,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+DEFAULT_PROVIDERS = [ProviderConfig(name="groq", api_key_env="GROQ_API_KEY")]
+
+
+def _build_ai_response(raw: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any]:
     """
-    Call a single LLM provider. Raises on failure.
+    Assemble an ai_validator-compatible response dict from a Groq call.
 
-    This is a thin wrapper. Actual HTTP calls are provider-specific.
-    For now, we simulate with a generic call.
+    Keeps ai_validator as the single source of truth: classification/explanation/
+    confidence/cited_evidence at top level + OpenAI-style usage block for tokens.
     """
-    api_key = os.environ.get(provider.api_key_env, "")
-    if not api_key and provider.name != "local":
-        raise ValueError(f"No API key for {provider.name} (env: {provider.api_key_env})")
+    return {
+        "classification": parsed.get("classification"),
+        "explanation": parsed.get("explanation"),
+        "confidence": parsed.get("confidence"),
+        "cited_evidence": parsed.get("cited_evidence", []),
+        "usage": {
+            "prompt_tokens": raw.get("tokens_in", 0),
+            "completion_tokens": raw.get("tokens_out", 0),
+        },
+    }
 
-    # Import provider-specific client
-    if provider.name == "openai":
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key, base_url=provider.base_url) if api_key else OpenAI()
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            tools=tools,
-            timeout=provider.timeout,
+
+class GroqFallbackChain:
+    """Groq-first chain: 70B primary → 8B fallback → UNRESOLVED."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        rate_limiter: Optional[GroqRateLimiter] = None,
+        client: Optional[GroqClient] = None,
+    ) -> None:
+        api_key = api_key or os.environ.get("GROQ_API_KEY", "") or ""
+        if not api_key:
+            logger.warning("%s not set — Groq calls will fail (deterministic engine unaffected)", "GROQ_API_KEY")
+        self._timeout = timeout
+        self._rate_limiter = rate_limiter or GroqRateLimiter()
+        self._client = client or GroqClient(
+            api_key=api_key,
+            rate_limiter=self._rate_limiter,
         )
-        return response.model_dump()
 
-    elif provider.name == "anthropic":
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        # Convert messages format for Anthropic
-        system_msg = ""
-        anthropic_messages = []
-        for m in messages:
-            if m["role"] == "system":
-                system_msg = m["content"]
-            else:
-                anthropic_messages.append(m)
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=system_msg,
-            messages=anthropic_messages,
+    def call(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> FallbackResult:
+        """
+        Run the Groq fallback chain.
+
+        Attempts PRIMARY_MODEL then SECONDARY_MODEL (once each). Returns
+        FallbackResult with success=True and a response dict compatible with
+        ai_validator, or success=False on full failure.
+        """
+        if tools:
+            # Groq JSON mode is driven by the prompt; object-mode JSON works too.
+            logger.info("tools passed to Groq chain (ignored — JSON via prompt)")
+        chain_start = time.monotonic()
+
+        for model in (PRIMARY_MODEL, SECONDARY_MODEL):
+            breaker_name = f"groq::{model}"
+            breaker = get_breaker(breaker_name)
+            if not breaker.allow_request():
+                logger.info("Skipping %s — circuit breaker OPEN", model)
+                continue
+
+            attempt_start = time.monotonic()
+            try:
+                raw = self._client.complete(messages, timeout=self._timeout, model=model)
+            except GroqError as exc:
+                breaker.record_failure()
+                logger.warning("Groq %s failed: %s", model, exc)
+                continue
+
+            parsed = parse_llm_json(raw.get("text", ""))
+            if parsed is None:
+                breaker.record_failure()
+                logger.warning("Groq %s returned unparsable JSON", model)
+                continue
+
+            breaker.record_success()
+            elapsed_ms = int((time.monotonic() - chain_start) * 1000)
+            logger.info("Groq succeeded via %s in %dms", model, int((time.monotonic() - attempt_start) * 1000))
+            return FallbackResult(
+                provider="groq",
+                response=_build_ai_response(raw, parsed),
+                latency_ms=elapsed_ms,
+                success=True,
+                model=model,
+            )
+
+        logger.warning("Groq fallback chain exhausted (70B and 8B)")
+        return FallbackResult(
+            provider="none",
+            success=False,
+            error="Groq models failed (70B and 8B)",
         )
-        # Convert to OpenAI-like format
-        return {
-            "choices": [{"message": {"content": response.content[0].text}}],
-            "usage": {
-                "prompt_tokens": response.usage.input_tokens,
-                "completion_tokens": response.usage.output_tokens,
-            },
-        }
-
-    elif provider.name == "local":
-        import httpx
-        payload = {"model": "llama3", "messages": messages, "stream": False}
-        with httpx.Client(timeout=provider.timeout) as client:
-            resp = client.post(f"{provider.base_url}/v1/chat/completions", json=payload)
-            resp.raise_for_status()
-            return resp.json()
-
-    raise ValueError(f"Unknown provider: {provider.name}")
 
 
 def call_with_fallback(
@@ -123,49 +164,14 @@ def call_with_fallback(
     providers: list[ProviderConfig] | None = None,
 ) -> FallbackResult:
     """
-    Try providers in order with circuit breaker and backoff.
+    Public entry point: run the Groq fallback chain.
 
-    Returns FallbackResult with success=True on first successful call,
-    or success=False if all providers fail.
+    Kept as the module-level function for backward compatibility. Returns the
+    same FallbackResult shape as the pre-Groq implementation.
     """
-    if providers is None:
-        providers = DEFAULT_PROVIDERS
-
-    for provider in providers:
-        breaker = get_breaker(provider.name)
-        if not breaker.allow_request():
-            logger.info("Skipping %s — circuit breaker OPEN", provider.name)
-            continue
-
-        last_error: Exception | None = None
-        for attempt in range(provider.max_retries + 1):
-            start = time.monotonic()
-            try:
-                response = _call_provider(provider, messages, tools)
-                elapsed_ms = int((time.monotonic() - start) * 1000)
-                breaker.record_success()
-                logger.info("LLM call succeeded via %s in %dms", provider.name, elapsed_ms)
-                return FallbackResult(
-                    provider=provider.name,
-                    response=response,
-                    latency_ms=elapsed_ms,
-                    success=True,
-                )
-            except Exception as exc:
-                last_error = exc
-                breaker.record_failure()
-                if attempt < provider.max_retries:
-                    delay = min(provider.base_delay * (2 ** attempt), provider.max_delay)
-                    logger.warning(
-                        "LLM call failed on %s (attempt %d/%d), retrying in %.1fs: %s",
-                        provider.name, attempt + 1, provider.max_retries + 1, delay, exc,
-                    )
-                    time.sleep(delay)
-
-        logger.warning("All retries exhausted for %s: %s", provider.name, last_error)
-
-    return FallbackResult(
-        provider="none",
-        success=False,
-        error="All LLM providers failed",
+    config = (providers or DEFAULT_PROVIDERS)[0]
+    chain = GroqFallbackChain(
+        api_key=os.environ.get(config.api_key_env, ""),
+        timeout=config.timeout,
     )
+    return chain.call(messages, tools=tools)

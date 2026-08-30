@@ -194,8 +194,9 @@ class TestParseLlmJson:
 
 class TestGroqClient:
     def test_requires_api_key(self) -> None:
-        with pytest.raises(ValueError):
-            GroqClient(api_key="")
+        client = GroqClient(api_key="")
+        with pytest.raises(Exception, match="GROQ_API_KEY not set"):
+            client._get_sdk_client()
 
     def test_default_model(self) -> None:
         client = GroqClient(api_key="gsk_test_key")

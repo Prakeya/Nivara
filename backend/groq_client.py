@@ -194,6 +194,8 @@ class GroqRateLimiter:
                 raise GroqRateLimitError("tokens_per_minute")
             # Daily limit
             if self._day_usage + n_tokens_estimate > self._tokens_per_day:
+                self._req_bucket.consume(float(n_requests))
+                self._tok_bucket.consume(float(n_tokens_estimate))
                 raise GroqDailyLimitError(
                     f"Daily token limit ({self._tokens_per_day}) would be exceeded"
                 )
@@ -365,8 +367,6 @@ class GroqClient:
         model: str = DEFAULT_MODEL,
         rate_limiter: Optional[GroqRateLimiter] = None,
     ) -> None:
-        if not api_key:
-            raise ValueError("GroqClient requires a non-empty api_key")
         self._api_key = api_key
         self._model = model
         self._rate_limiter = rate_limiter or GroqRateLimiter()
@@ -378,6 +378,10 @@ class GroqClient:
 
     def _get_sdk_client(self):
         if self._client is None:
+            if not self._api_key:
+                raise GroqError(
+                    "GROQ_API_KEY not set — Groq calls unavailable (deterministic engine still runs)"
+                )
             try:
                 from groq import Groq
             except ImportError as exc:
@@ -396,9 +400,19 @@ class GroqClient:
         """Groq free tier cost is 0.0. Kept for future paid-tier support."""
         return 0.0
 
-    def complete(self, messages: list[dict[str, Any]], timeout: int = 15) -> dict[str, Any]:
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        timeout: int = 15,
+        model: Optional[str] = None,
+    ) -> dict[str, Any]:
         """
         Send messages to Groq and return a normalized dict.
+
+        Args:
+            messages: Chat messages (system/user).
+            timeout: Per-request timeout in seconds.
+            model: Optional model override (defaults to the client's model).
 
         Returns:
             {
@@ -418,10 +432,11 @@ class GroqClient:
         self._rate_limiter.pre_flight(n_tokens_estimate=est_tokens, n_requests=1)
 
         client = self._get_sdk_client()
+        serve_model = model or self._model
         start = time.monotonic()
         try:
             response = client.chat.completions.create(
-                model=self._model,
+                model=serve_model,
                 messages=messages,
                 timeout=timeout,
                 temperature=0.0,
@@ -449,7 +464,7 @@ class GroqClient:
             "text": text,
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
-            "model": self._model,
+            "model": serve_model,
             "latency_ms": latency_ms,
         }
 
