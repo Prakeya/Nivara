@@ -203,7 +203,7 @@ GET  /api/review/pending            — List pending reviews
 | Validation | Pydantic v2 |
 | Data Processing | Python / CSV |
 | Database | SQLite (append-only audit) |
-| AI | LLM API (OpenAI) with heuristic fallback |
+| AI | Groq LLM (llama-3.1-70b/8b) with graceful UNRESOLVED escalation |
 | Frontend | React (in-browser Babel) |
 | Testing | pytest |
 | Financial Representation | Integer paise (no floating-point) |
@@ -222,7 +222,10 @@ Nivara/
 │   ├── engine.py            — Deterministic reconciliation engine
 │   ├── generator.py         — Synthetic data generator
 │   ├── evaluation.py        — Evaluation harness
-│   ├── ai_investigator.py   — LLM exception analyzer + DemoLLMClient
+│   ├── ai_investigator.py   — LLM exception analyzer (Groq) + investigate_v2
+│   ├── groq_client.py       — Groq SDK wrapper + free-tier rate limiter
+│   ├── model_selector.py    — Case-complexity → 8B/70B model choice
+│   ├── fallback_chain.py    — Groq 70B → 8B fallback chain
 │   ├── batch_analyzer.py    — Cross-settlement pattern detection
 │   ├── audit.py             — Append-only audit logger (SHA-256 hash chain)
 │   └── mcp_client.py        — MCP client
@@ -237,7 +240,7 @@ Nivara/
 │       └── BatchPatterns.jsx
 ├── scripts/
 │   └── demo.py                — One-command demo script
-├── tests/                   — 581 tests
+├── tests/                   — 634 tests
 ├── data/
 │   ├── demo/                — Demo dataset (80 settlements)
 │   └── evaluation/          — Evaluation dataset with ground truth
