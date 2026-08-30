@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+data/audit/
+data/demo/
+*.db
+.env
+.env.local
+pull_request_template.md
