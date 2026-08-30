@@ -962,14 +962,16 @@ def investigate_v2(
 
     This is the new architecture function. It:
     1. Builds a prompt from EvidencePacketV2
-    2. Calls LLM via fallback chain (OpenAI → Anthropic → Local)
-    3. Validates response via AI Validator
-    4. Returns AIResponse or None (no heuristic fallback)
+    2. Selects the Groq model by evidence complexity (simple → 8B, complex → 70B)
+    3. Calls the Groq fallback chain (primary → alternate → UNRESOLVED)
+    4. Validates response via AI Validator
+    5. Returns AIResponse or None (no heuristic fallback)
 
-    Requires OPENAI_API_KEY or ANTHROPIC_API_KEY environment variables.
+    Requires GROQ_API_KEY. If unset or all Groq models fail → None
+    (UNRESOLVED → human review).
     """
-    from backend.evidence_packet import EvidencePacketV2
-    from backend.fallback_chain import call_with_fallback, ProviderConfig
+    from backend.model_selector import select_model
+    from backend.fallback_chain import call_with_fallback
     from backend.ai_validator import validate_ai_response
     from backend.prompt_registry import get_prompt, get_prompt_version
 
@@ -990,10 +992,14 @@ def investigate_v2(
         {"role": "user", "content": user_prompt},
     ]
 
-    # Call LLM via fallback chain
-    fallback_result = call_with_fallback(messages=messages)
+    # Pick model by evidence complexity, then call the Groq fallback chain
+    selected_model = select_model(evidence_packet_v2)
+    fallback_result = call_with_fallback(
+        messages=messages,
+        primary_model=selected_model,
+    )
     if not fallback_result.success:
-        logger.warning("All LLM providers failed for %s", evidence_packet_v2.settlement_id)
+        logger.warning("Groq models failed for %s", evidence_packet_v2.settlement_id)
         return None
 
     # Validate response
@@ -1004,6 +1010,7 @@ def investigate_v2(
         provider=fallback_result.provider,
         prompt_version=prompt_version,
         latency_ms=fallback_result.latency_ms,
+        model_name=fallback_result.model or selected_model,
     )
 
     if validation.ai_response is None:
