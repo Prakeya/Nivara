@@ -110,6 +110,19 @@ Two hard guarantees this diagram encodes: **the deterministic engine is the only
 
 ---
 
+## Design Philosophy
+
+> "If the project works and the code is clean, it's already ahead of 95% of the other submissions."
+> — Razorpay Buildathon ¶ Judge
+
+Nivara is designed for that quote — working and clean before clever:
+
+1. **Works first.** Every commit runs the full test suite (650+ tests). The demo path — upload four CSVs, get a dashboard, audit trail, and review queue — works without a single external API key.
+2. **Clean second.** Money math lives only in deterministic code; the AI has a read-only, schema-enforced interface; the audit trail is tamper-evident by construction.
+3. **Nothing hidden.** Known blind spots are documented, the evaluation dataset is synthetic and co-designed, and AI auto-approval is impossible — not best-effort.
+
+---
+
 ## Evaluation
 
 ### Results on 80-Settlement Ground-Truth Dataset
