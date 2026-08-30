@@ -234,8 +234,9 @@ This will:
 
 ## API
 
+Full reference with curl examples: **[API.md](API.md)**
+
 ```
-GET  /health                        — Health check
 POST /upload                        — Upload 4 CSVs, return job_id
 GET  /status/{job_id}               — Processing status + results
 GET  /audit/{upload_hash}           — Audit trail for a batch
@@ -243,6 +244,9 @@ GET  /audit/{upload_hash}/verify    — Verify hash chain integrity
 GET  /settlement/{settlement_id}    — Settlement audit history
 POST /api/review/{id}/decision      — Submit human review
 GET  /api/review/pending            — List pending reviews
+GET  /api/metrics                   — JSON telemetry (dashboard)
+GET  /metrics                       — Prometheus metrics
+GET  /health                        — Health check
 ```
 
 ---
