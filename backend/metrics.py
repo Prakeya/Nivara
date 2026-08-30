@@ -3,10 +3,15 @@ Prometheus metrics for Nivara.
 
 Exposes /metrics endpoint with settlement throughput, latency, error rate.
 Uses prometheus_client library (lightweight, no external deps beyond the lib).
+
+Also maintains dependency-free in-memory trackers for LLM calls and Groq
+free-tier quota consumption (used by GET /api/metrics), which work even when
+prometheus_client is not installed.
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Optional
 
@@ -93,3 +98,82 @@ else:
     def set_active_jobs(count: int) -> None: pass
     def get_metrics() -> bytes: return b"# prometheus_client not installed\n"
     def get_content_type() -> str: return "text/plain"
+
+
+# ---------------------------------------------------------------------------
+# Dependency-free in-memory trackers (GET /api/metrics)
+#
+# These always work — even without prometheus_client — and back the
+# Metrics Dashboard (pie chart, Groq quota progress bar, latency, errors).
+# ---------------------------------------------------------------------------
+
+_llm_lock = threading.Lock()
+_llm_calls = 0
+_llm_errors = 0
+_llm_latency_ms = 0.0
+
+_groq_lock = threading.Lock()
+_groq_daily_used: dict[str, int] = {}
+
+
+def record_llm_call_metric(status: str, latency_ms: float) -> None:
+    """Record an LLM call outcome for the in-memory dashboard metrics."""
+    global _llm_calls, _llm_errors, _llm_latency_ms
+    with _llm_lock:
+        _llm_calls += 1
+        _llm_latency_ms += max(0.0, float(latency_ms))
+        if status != "ok":
+            _llm_errors += 1
+    if PROMETHEUS_AVAILABLE:
+        try:
+            record_llm_call("groq", status, latency_ms / 1000.0)
+        except Exception:
+            pass
+
+
+def record_groq_usage(tokens: int, model: str) -> None:
+    """Accumulate estimated token consumption against the Groq free tier."""
+    with _groq_lock:
+        _groq_daily_used[model] = _groq_daily_used.get(model, 0) + max(0, int(tokens))
+    if PROMETHEUS_AVAILABLE:
+        try:
+            from prometheus_client import Gauge as _Gauge
+
+            _g = _Gauge(
+                "nivara_groq_daily_tokens_used",
+                "Groq daily tokens consumed",
+                ["model"],
+            )
+            with _groq_lock:
+                _g.labels(model=model).set(_groq_daily_used[model])
+        except Exception:
+            pass
+
+
+def llm_metrics_snapshot() -> dict:
+    """Return aggregate LLM call metrics for the dashboard."""
+    with _llm_lock:
+        return {
+            "total_calls": _llm_calls,
+            "errors": _llm_errors,
+            "avg_latency_ms": round(_llm_latency_ms / _llm_calls, 1) if _llm_calls else 0.0,
+            "error_rate": round(_llm_errors / _llm_calls, 4) if _llm_calls else 0.0,
+        }
+
+
+def groq_daily_usage_snapshot() -> dict:
+    """Return Groq free-tier quota usage for the dashboard progress bar."""
+    from backend.groq_client import DEFAULT_TOKENS_PER_DAY
+
+    with _groq_lock:
+        used = sum(_groq_daily_used.values())
+        by_model = dict(_groq_daily_used)
+    limit = int(DEFAULT_TOKENS_PER_DAY)
+    remaining = max(0, limit - used)
+    return {
+        "daily_limit": limit,
+        "used_tokens": used,
+        "remaining_tokens": remaining,
+        "pct_used": round((used / limit) * 100, 2) if limit else 0.0,
+        "by_model": by_model,
+    }
