@@ -1,0 +1,23 @@
+{
+  "enabled": false,
+  "default_model": "gpt-4o-mini",
+  "description": "A/B testing configuration for LLM models",
+  "variants": {
+    "control": {
+      "model": "gpt-4o-mini",
+      "traffic_pct": 0.8,
+      "description": "Current production model"
+    },
+    "challenger": {
+      "model": "gpt-4o",
+      "traffic_pct": 0.2,
+      "description": "Higher accuracy, higher cost"
+    }
+  },
+  "metrics": {
+    "track_accuracy": true,
+    "track_latency": true,
+    "track_cost": true,
+    "min_sample_size": 100
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "description": "Fee and tax structure configuration for Razorpay settlements",
+  "fee_structures": {
+    "upi": {
+      "percentage": 0.0,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "UPI — zero MDR"
+    },
+    "card": {
+      "percentage": 2.0,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "Credit/Debit card payments"
+    },
+    "netbanking": {
+      "percentage": 1.5,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "Netbanking payments"
+    },
+    "wallet": {
+      "percentage": 1.5,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "Wallet payments"
+    },
+    "emi": {
+      "percentage": 2.5,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "EMI payments"
+    },
+    "paylater": {
+      "percentage": 2.0,
+      "fixed_paise": 0,
+      "gst_percentage": 18,
+      "description": "Pay Later payments"
+    }
+  },
+  "settlement_cycles": {
+    "T+1": {"expected_days": 1, "description": "Next-day settlement"},
+    "T+2": {"expected_days": 2, "description": "Standard 2-day settlement"},
+    "T+3": {"expected_days": 3, "description": "3-day settlement for high-risk"}
+  },
+  "tolerance_paise": {
+    "rounding": 1,
+    "fee_tolerance": 0,
+    "tax_tolerance": 0,
+    "description": "Allowed tolerances in paise for each check type"
+  }
+}
