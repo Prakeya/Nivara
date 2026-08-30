@@ -1,3 +1,15 @@
+# =============================================================================
+# Nivara — Docker Compose (production-architecture preview)
+#
+# The reconciliation engine is storage-agnostic: today the append-only audit
+# chain runs on SQLite (proven by tests), while this stack provisions the
+# PostgreSQL 15 + Redis 7 services the production architecture targets
+# (see README → "Scaling to Razorpay Production").
+#
+#   docker compose up --build
+#   open http://localhost:8000
+# =============================================================================
+
 services:
   nivara:
     build: .
@@ -5,9 +17,51 @@ services:
       - "8000:8000"
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NIVARA_API_KEY=${NIVARA_API_KEY:-}
     volumes:
       - ./data/evaluation:/app/data/evaluation
       - audit-data:/app/data/audit
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=nivara
+      - POSTGRES_PASSWORD=nivara
+      - POSTGRES_DB=nivara
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nivara -d nivara"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   audit-data:
+  postgres-data:
+  redis-data:
