@@ -3,7 +3,7 @@
 **Track:** Razorpay Buildathon 2026 — Track 04: AI Finance Controller
 
 > **87.5% match rate on 80-settlement evaluation dataset**
-> 505 tests, tamper-proof audit trail, 726+ settlements/sec
+> 645+ tests, tamper-proof audit trail, 726+ settlements/sec
 > AI investigates. Humans decide. Zero auto-approvals.
 
 ---
@@ -94,7 +94,7 @@ Upload CSVs → Schema Validation → Entity Linking → Deterministic Rules
 | **False Accept Rate** | 12.5% (10 missed — known blind spots) |
 | **Throughput** | 726+ settlements/sec |
 | **AI Auto-Approval Rate** | 0% (enforced by schema) |
-| **Test Count** | 505 passing |
+| **Test Count** | 645 passing |
 | **Audit Records** | Append-only with SHA-256 hash chain |
 
 ### Edge-Case Categories (12 total)
@@ -127,6 +127,20 @@ These false negatives are **honest** — they show where the deterministic engin
 
 ---
 
+## Scaling to Razorpay Production
+
+- **Streaming Ingestion:** Batch files are parsed in chunks of **10,000 rows** instead of loading the full dataset into memory — memory stays flat as file size grows.
+- **Parallel Processing:** Each chunk is validated and linked independently, so ingestion scales across worker cores.
+- **Memory-bounded:** No full dataset load at any stage; per-chunk processing keeps peak RAM bounded regardless of settlement volume.
+- **Horizontal Scaling:** Stateless workers behind a work queue; any worker can re-ingest and re-drive the same batch deterministically.
+- **Persistence:** Today the append-only audit log is SQLite; at scale it moves to **PostgreSQL 15 writers** with the audit chain preserved, and **Redis 7** for idempotency keys and hot-read caches.
+- **Fault Tolerance:** Batch-level retries with idempotent upload hashes — a partially ingested batch can be safely retried from the same client state.
+- **Multi-tenancy:** Settlement batches are keyed by a `tenant_id` at the DB partition level, keeping per-merchant isolation and retention policies.
+
+The audit trail — SHA-256 hash-chained, write-once records — is storage-agnostic by construction and survives this upgrade unchanged.
+
+---
+
 ## Safety Architecture
 
 ### 1. AI Never Calculates Money
@@ -152,7 +166,7 @@ Timeouts, malformed responses, API failures, and invalid evidence result in `UNR
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run tests (505 should pass)
+# 2. Run tests (645+ should pass)
 PYTHONPATH="$(pwd)" python3 -m pytest -q
 
 # 3. Generate demo data & run evaluation
@@ -173,7 +187,7 @@ python3 scripts/demo.py
 
 This will:
 1. Generate 80 synthetic settlements with ground truth
-2. Run the full test suite (505 tests)
+2. Run the full test suite (645+ tests)
 3. Ingest → Link → Reconcile → AI Investigate → Evaluate
 4. Print match rate, per-class F1, and throughput
 
