@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
+import MetricsDashboard from './components/MetricsDashboard.jsx'
 const { useState, useCallback, useEffect, useRef } = React;
 
 const API = "";
@@ -378,7 +379,10 @@ function App() {
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "patterns" ? "active" : ""}`} onClick={() => hasData && setView("patterns")}>Patterns</div>
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "sources" ? "active" : ""}`} onClick={() => hasData && setView("sources")}>Sources</div>
           <div className={`tab ${!hasData ? "disabled" : ""} ${view === "audit" ? "active" : ""}`} onClick={() => hasData && setView("audit")}>Audit Trail</div>
+          <div className={`tab ${view === "metrics" ? "active" : ""}`} onClick={() => setView("metrics")}>Metrics</div>
         </div>
+
+        {view === "metrics" && <MetricsDashboard />}
 
         {view === "upload" && <UploadPanel onUploadComplete={onUploadComplete} loading={loading} />}
 
