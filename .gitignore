@@ -11,3 +11,4 @@ data/audit/
 *.db
 .env
 .env.local
+node_modules/
