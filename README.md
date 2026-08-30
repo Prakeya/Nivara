@@ -46,6 +46,32 @@ Upload CSVs → Schema Validation → Entity Linking → Deterministic Rules
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Upload 4 CSVs] --> B[Ingestion<br/>schema validation + SHA-256 idempotency hash]
+    B --> C{Upload cached?}
+    C -- yes --> C0[Return cached batch]
+    C -- no --> D[Entity Linker<br/>payments / refunds / bank credits]
+    D --> E[Duplicate Detection<br/>payment, refund, settlement, UTR]
+    E --> F[Deterministic Engine<br/>integer paise math only]
+    F --> G{Decision}
+    G -- CLEAN_MATCH / DETERMINISTIC_EXCEPTION --> H[Finalize]
+    G -- MATH_DISCREPANCY --> I[Evidence Packet V2<br/>structured, citation-only IDs]
+    I --> J[Groq Fallback Chain<br/>llama-3.1-70b → 3.1-8b → UNRESOLVED]
+    J --> K[AI Response Validator<br/>citations must exist in packet]
+    K -- valid --> H
+    K -- malformed / failure --> L[UNRESOLVED → Human Review Queue]
+    H --> M[Append-only SHA-256 audit chain]
+    H --> N[Dashboard + /api/metrics telemetry]
+    L --> N
+```
+
+Two hard guarantees this diagram encodes: **the deterministic engine is the only code that computes money**, and **the AI can only escalate, never approve**.
+
+---
+
 ## Screenshots
 
 > **Dashboard** — 5-card metrics with match rate, exception breakdown, and blind spots
