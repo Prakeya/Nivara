@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests + static analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend deps
+        run: pip install -r requirements.txt pytest-cov mypy bandit
+
+      - name: Run test suite with coverage
+        run: PYTHONPATH="." python3 -m pytest --cov=backend --cov-fail-under=85 --cov-report=term-missing -q
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Type-check (strict)
+        run: PYTHONPATH="." python3 -m mypy backend --strict
+
+      - name: Bandit security scan
+        run: python3 -m bandit -q -r backend/ -f txt
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
