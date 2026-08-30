@@ -4,12 +4,12 @@ Nivara — AI Finance Controller Demo
 
 One-command end-to-end run:
   1. Generate 80 synthetic settlements with ground truth
-  2. Run full test suite (505+ tests)
+  2. Run full test suite (581+ tests)
   3. Ingest → Link → Reconcile → AI Investigate → Evaluate
   4. Print evaluation report with match rate, per-class F1, throughput
 
 Usage:
-    python3 demo.py
+    python3 scripts/demo.py
 """
 
 import json
@@ -33,7 +33,11 @@ def run(cmd: list[str], desc: str, check: bool = True) -> subprocess.CompletedPr
 
 
 def main() -> int:
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    # Change to project root (parent of scripts/) and ensure it's on sys.path
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(project_root)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
     print("=" * 60)
     print("  NIVARA — AI Finance Controller Demo")

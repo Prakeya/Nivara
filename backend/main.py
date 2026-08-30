@@ -154,18 +154,16 @@ def _get_audit_logger() -> AuditLogger:
 
 
 def _get_llm_client():
-    """Return the production LLM client based on environment configuration.
+    """Return a truthy value if any LLM provider is available.
 
-    - If OPENAI_API_KEY is set → OpenAIClient (real LLM)
-    - If OPENAI_API_KEY is missing → None (AI investigation skipped)
+    The new architecture uses a fallback chain (OpenAI → Anthropic → Local).
+    This function returns a non-None value if any API key is configured,
+    which signals to run_engine that AI investigation should be enabled.
     """
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if api_key:
-        try:
-            from backend.ai_investigator import OpenAIClient
-            return OpenAIClient(api_key=api_key)
-        except Exception:
-            pass
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if openai_key or anthropic_key:
+        return "configured"
     return None
 
 
