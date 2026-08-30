@@ -298,6 +298,7 @@ class AIResponse(BaseModel):
     tokens_in: int = Field(default=0, ge=0)
     tokens_out: int = Field(default=0, ge=0)
     provider_name: str = "unknown"
+    model_name: str = "unknown"
     cost_inr: float = Field(default=0.0, ge=0.0)
     latency_ms: int = Field(default=0, ge=0)
 

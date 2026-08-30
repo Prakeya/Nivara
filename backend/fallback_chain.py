@@ -105,20 +105,24 @@ class GroqFallbackChain:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        primary_model: Optional[str] = None,
     ) -> FallbackResult:
         """
         Run the Groq fallback chain.
 
-        Attempts PRIMARY_MODEL then SECONDARY_MODEL (once each). Returns
-        FallbackResult with success=True and a response dict compatible with
-        ai_validator, or success=False on full failure.
+        Attempts primary_model (default: 70B) then the alternate model (once
+        each). Returns FallbackResult with success=True and a response dict
+        compatible with ai_validator, or success=False on full failure.
         """
         if tools:
             # Groq JSON mode is driven by the prompt; object-mode JSON works too.
             logger.info("tools passed to Groq chain (ignored — JSON via prompt)")
         chain_start = time.monotonic()
 
-        for model in (PRIMARY_MODEL, SECONDARY_MODEL):
+        primary = primary_model or PRIMARY_MODEL
+        fallback = SECONDARY_MODEL if primary == PRIMARY_MODEL else PRIMARY_MODEL
+
+        for model in (primary, fallback):
             breaker_name = f"groq::{model}"
             breaker = get_breaker(breaker_name)
             if not breaker.allow_request():
@@ -162,6 +166,7 @@ def call_with_fallback(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
     providers: list[ProviderConfig] | None = None,
+    primary_model: Optional[str] = None,
 ) -> FallbackResult:
     """
     Public entry point: run the Groq fallback chain.
@@ -174,4 +179,4 @@ def call_with_fallback(
         api_key=os.environ.get(config.api_key_env, ""),
         timeout=config.timeout,
     )
-    return chain.call(messages, tools=tools)
+    return chain.call(messages, tools=tools, primary_model=primary_model)

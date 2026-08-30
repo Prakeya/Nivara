@@ -621,3 +621,80 @@ class TestProductionLLMPath:
                 cited_evidence=["timing"],
                 expected_amount_paise=100000,  # forbidden field
             )
+
+
+class TestInvestigateV2GroqPath:
+    """investigate_v2 uses the Groq fallback chain + model selector."""
+
+    def _packet(self) -> "EvidencePacketV2":
+        from backend.evidence_packet import EvidencePacketV2, FeeEvidence
+        return EvidencePacketV2.model_construct(
+            settlement_id="SETL_GROQ",
+            fee_evidence=FeeEvidence(
+                computed_fee_paise=1000, reported_fee_paise=1500,
+                formula_used="1%", discrepancy_paise=500,
+            ),
+        )
+
+    def _success_result(self, model_name: str = "llama-3.1-8b-instant"):
+        from backend.fallback_chain import FallbackResult
+        return FallbackResult(
+            provider="groq",
+            success=True,
+            model=model_name,
+            latency_ms=83,
+            response={
+                "classification": "TIMING_MISMATCH",
+                "explanation": "settlement delayed by bank",
+                "confidence": 0.8,
+                "cited_evidence": ["fee_evidence"],
+                "usage": {"prompt_tokens": 120, "completion_tokens": 40},
+            },
+        )
+
+    def test_simple_packet_selects_8b_and_returns_ai_response(self):
+        from unittest.mock import patch
+        from backend.ai_investigator import investigate_v2
+
+        with patch(
+            "backend.fallback_chain.call_with_fallback",
+            return_value=self._success_result(),
+        ) as mock_fb:
+            ai = investigate_v2(self._packet(), 100000, 100500, 500)
+
+        assert ai is not None
+        mock_fb.assert_called_once()
+        assert mock_fb.call_args.kwargs["primary_model"] == "llama-3.1-8b-instant"
+        assert ai.provider_name == "groq"
+        assert ai.model_name == "llama-3.1-8b-instant"
+        assert ai.classification == AIClassification.TIMING_MISMATCH
+        assert ai.latency_ms == 83
+        assert ai.cost_inr == 0.0
+
+    def test_fallback_failure_returns_none(self):
+        from unittest.mock import patch
+        from backend.fallback_chain import FallbackResult
+        from backend.ai_investigator import investigate_v2
+
+        with patch(
+            "backend.fallback_chain.call_with_fallback",
+            return_value=FallbackResult(success=False),
+        ):
+            ai = investigate_v2(self._packet(), 100000, 100500, 500)
+
+        assert ai is None
+
+    def test_invalid_citations_returns_none(self):
+        from unittest.mock import patch
+        from backend.fallback_chain import FallbackResult
+        from backend.ai_investigator import investigate_v2
+
+        res = self._success_result()
+        res.response["cited_evidence"] = ["hallucinated_evidence"]
+        with patch(
+            "backend.fallback_chain.call_with_fallback",
+            return_value=res,
+        ):
+            ai = investigate_v2(self._packet(), 100000, 100500, 500)
+
+        assert ai is None

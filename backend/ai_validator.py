@@ -53,6 +53,7 @@ PROVIDER_COST_PER_1K = {
     "openai": 0.002,
     "anthropic": 0.003,
     "local": 0.0,
+    "groq": 0.0,  # free tier
 }
 
 # Valid AIClassification values
@@ -124,6 +125,7 @@ def validate_ai_response(
     provider: str = "unknown",
     prompt_version: str = "unknown",
     latency_ms: int = 0,
+    model_name: str = "unknown",
 ) -> AIValidationResult:
     """
     Full AI validation pipeline: parse → validate citations → return result.
@@ -149,6 +151,7 @@ def validate_ai_response(
     ai_response.tokens_in = metrics.tokens_in
     ai_response.tokens_out = metrics.tokens_out
     ai_response.provider_name = provider
+    ai_response.model_name = model_name
     ai_response.cost_inr = metrics.cost_inr
     ai_response.latency_ms = latency_ms
 
