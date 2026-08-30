@@ -3,21 +3,17 @@ function CrossSourceLinker({ status }) {
 
   const results = status.results;
 
+  const cleanCount = results.filter(r => r.decision_state === 'CLEAN_MATCH').length;
+  const exceptionCount = results.length - cleanCount;
+
   const sources = React.useMemo(() => {
-    const settlementIds = results.map(r => r.settlement_id);
-
-    const txIds = settlementIds.slice(0, Math.ceil(settlementIds.length * 0.9));
-    const slIds = settlementIds;
-    const rfIds = settlementIds.filter((_, i) => i % 3 === 0);
-    const bcIds = settlementIds.filter((_, i) => i % 4 === 1);
-
     return [
-      { name: 'transactions.csv', label: 'Transactions', color: '#2563eb', icon: '&#128196;', ids: txIds, count: txIds.length, desc: 'Internal transaction records' },
-      { name: 'settlements.csv', label: 'Settlements', color: '#7c3aed', icon: '&#128179;', ids: slIds, count: slIds.length, desc: 'Settlement batch data' },
-      { name: 'refunds.csv', label: 'Refunds', color: '#dc2626', icon: '&#128176;', ids: rfIds, count: rfIds.length, desc: 'Refund transaction records' },
-      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#059669', icon: '&#127974;', ids: bcIds, count: bcIds.length, desc: 'Bank credit statements' },
+      { name: 'transactions.csv', label: 'Transactions', color: '#2563eb', icon: '&#128196;', count: 186, desc: 'Internal transaction records' },
+      { name: 'settlements.csv', label: 'Settlements', color: '#7c3aed', icon: '&#128179;', count: 80, desc: 'Settlement batch data' },
+      { name: 'refunds.csv', label: 'Refunds', color: '#dc2626', icon: '&#128176;', count: 23, desc: 'Refund transaction records' },
+      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#059669', icon: '&#127974;', count: 80, desc: 'Bank credit statements' },
     ];
-  }, [results]);
+  }, []);
 
   const linkedPairs = React.useMemo(() => {
     const pairs = [];
@@ -73,7 +69,6 @@ function CrossSourceLinker({ status }) {
             const x2 = (p.to / 3) * 700 + 100;
             const y1 = 30 + (p.fromIdx % 5) * 20;
             const y2 = 30 + (p.toIdx % 5) * 20;
-            const grad = p.color === '#4ade80' ? 'linkGradGood' : p.color === '#fbbf24' ? 'linkGradWarn' : 'linkGradBad';
             return (
               <path
                 key={i}
@@ -117,7 +112,7 @@ function CrossSourceLinker({ status }) {
       </div>
 
       <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--blue-bg)', borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--blue)', border: '1px solid #bfdbfe' }}>
-        <strong>Linkage Status:</strong> {results.filter(r => r.decision_state === 'CLEAN_MATCH').length} matched across sources &bull; {results.filter(r => r.difference_paise !== 0).length} discrepancies flagged for review
+        <strong>Linkage Status:</strong> {cleanCount} settlements matched cleanly across all 4 sources &bull; {exceptionCount} settlements have discrepancies requiring review
       </div>
     </div>
   );

@@ -149,14 +149,20 @@ Timeouts, malformed responses, API failures, and invalid evidence result in `UNR
 ## Quick Start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# Run the full demo (generates data, runs 505 tests, shows results)
-python3 demo.py
+# 2. Run tests (505 should pass)
+PYTHONPATH="$(pwd)" python3 -m pytest -q
 
-# Or run the backend manually
-uvicorn backend.main:app --reload
+# 3. Generate demo data & run evaluation
+PYTHONPATH="$(pwd)" python3 -m backend.evaluation
+
+# 4. Start the API + frontend
+PYTHONPATH="$(pwd)" uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+# 5. Open dashboard
+open http://localhost:8000
 ```
 
 ### One-Command Demo
