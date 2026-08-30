@@ -16,31 +16,6 @@ def clean_audit_db():
 
 @pytest.fixture
 def tmp_prompts_dir(tmp_path):
-    """Create a temporary prompts directory with test data."""
-    prompts_dir = tmp_path / "prompts"
-    prompts_dir.mkdir()
-
-    # JSON prompt
-    json_data = {
-        "description": "Test prompt",
-        "latest": "1.0",
-        "versions": {
-            "1.0": "Test prompt v1 content",
-            "2.0": "Test prompt v2 content",
-        },
-    }
-    (prompts_dir / "test_prompt.json").write_text(json.dumps(json_data))
-
-    # Markdown prompt
-    v1_dir = prompts_dir / "v1"
-    v1_dir.mkdir()
-    (v1_dir / "system.md").write_text("# System Prompt\n\nSettlement reconciliation analyst v1.")
-
-    return prompts_dir
-
-
-@pytest.fixture
-def tmp_prompts_dir(tmp_path):
     """Create a temporary prompts directory with test fixtures."""
     # JSON prompt
     json_prompt = {
