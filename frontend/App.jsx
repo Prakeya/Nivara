@@ -278,8 +278,16 @@ function App() {
   const handleHumanReview = useCallback(async (settlementId, decision) => {
     try {
       const resp = await fetch(
-        `${API}/api/review/${settlementId}/decision?decision=${decision}&reason=Manual+review&reviewer_id=frontend_user`,
-        { method: "POST" }
+        `${API}/api/review/${settlementId}/decision`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            decision: decision,
+            reason: "Manual review",
+            reviewer_id: "frontend_user",
+          }),
+        }
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();

@@ -20,10 +20,10 @@ function AgentReasoningTree({ agentResponse }) {
   const toggleThought = (i) => setExpandedThoughts(prev => ({ ...prev, [i]: !prev[i] }));
 
   const stepIcon = (type) => {
-    if (type === 'TOOL_CALL') return '&#128295;';
-    if (type === 'DECISION') return '&#128269;';
-    if (type === 'OBSERVATION') return '&#128065;';
-    return '&#9998;';
+    if (type === 'TOOL_CALL') return '\uD83D\uDD27';
+    if (type === 'DECISION') return '\uD83D\uDD0D';
+    if (type === 'OBSERVATION') return '\uD83D\uDC41';
+    return '\u270F';
   };
 
   const stepColor = (type) => {
@@ -71,7 +71,7 @@ function AgentReasoningTree({ agentResponse }) {
             }} onClick={() => toggleStep(idx)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.8rem' }} dangerouslySetInnerHTML={{ __html: stepIcon(step.action_type) }} />
+                  <span style={{ fontSize: '0.8rem' }}>{stepIcon(step.action_type)}</span>
                   <span style={{ fontWeight: 600, fontSize: '0.8rem', color: stepColor(step.action_type) }}>
                     {step.action_type}
                   </span>

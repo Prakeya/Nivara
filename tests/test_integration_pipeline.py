@@ -12,8 +12,6 @@ from datetime import date, datetime
 import pytest
 
 from backend.ai_investigator import (
-    DemoLLMClient,
-    MockLLMClient,
     investigate,
     MAX_AGENT_ITERATIONS,
     AUTO_RESOLVE_CONFIDENCE_THRESHOLD,
@@ -21,6 +19,7 @@ from backend.ai_investigator import (
     calculate_expected_fee,
     check_gst_compliance,
 )
+from tests.mocks import MockLLMClient
 from backend.engine import run_engine
 from backend.evaluation import evaluate_batch, EvaluationMetrics
 from backend.ingestion import ingest_csvs
@@ -86,18 +85,18 @@ def _make_packet(
 
 
 class TestEndToEndPipeline:
-    """Full pipeline: EvidencePacket → DemoLLMClient → InvestigationResult."""
+    """Full pipeline: EvidencePacket → MockLLMClient → InvestigationResult."""
 
-    def test_demo_client_produces_valid_result(self):
+    def test_mock_client_produces_valid_result(self):
         packet = _make_packet(failed=["MATH_DISCREPANCY"])
-        result = investigate(packet, llm_client=DemoLLMClient())
+        result = investigate(packet, llm_client=MockLLMClient())
 
         assert result.decision in (DecisionState.REVIEW_REQUIRED, DecisionState.AUTO_RESOLVED)
         assert result.ai_response is not None
         assert result.agent_response is not None
         assert result.confidence_tier in ("TIER_1", "TIER_2", "TIER_3")
         assert result.agent_iterations >= 1
-        assert result.is_mock is True
+        assert result.is_mock is False
 
     def test_mock_client_produces_valid_result(self):
         packet = _make_packet(failed=["MATH_DISCREPANCY"])

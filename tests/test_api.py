@@ -373,7 +373,7 @@ class TestReviewAPI:
 
         resp = client.post(
             f"/api/review/{sid}/decision",
-            params={"decision": "APPROVE", "reason": "Verified manually", "reviewer_id": "judge_1"},
+            json={"decision": "APPROVE", "reason": "Verified manually", "reviewer_id": "judge_1"},
         )
         assert resp.status_code == 200
         assert resp.json()["decision"] == "APPROVE"
@@ -392,7 +392,7 @@ class TestReviewAPI:
 
         resp = client.post(
             f"/api/review/{sid}/decision",
-            params={"decision": "REJECT", "reason": "Fraud detected", "reviewer_id": "judge_1"},
+            json={"decision": "REJECT", "reason": "Fraud detected", "reviewer_id": "judge_1"},
         )
         assert resp.status_code == 200
         assert resp.json()["decision"] == "REJECT"
@@ -401,7 +401,7 @@ class TestReviewAPI:
         """POST /api/review/{id}/decision with invalid decision returns 400."""
         resp = client.post(
             "/api/review/SETL_FAKE/decision",
-            params={"decision": "INVALID", "reason": "test", "reviewer_id": "judge_1"},
+            json={"decision": "INVALID", "reason": "test", "reviewer_id": "judge_1"},
         )
         assert resp.status_code == 400
 

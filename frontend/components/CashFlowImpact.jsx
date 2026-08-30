@@ -24,10 +24,10 @@ function CashFlowImpact({ status }) {
   const formatCurrency = (p) => '\u20B9' + Math.abs(p / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
   const metrics = [
-    { label: 'Expected Total', value: data.expected, color: '#2563eb', bg: '#eff6ff', icon: '&#128176;' },
-    { label: 'Actual Credited', value: data.actual, color: '#059669', bg: '#ecfdf5', icon: '&#9989;' },
-    { label: 'Discrepancy', value: data.discrepancy, color: data.discrepancy > 0 ? '#dc2626' : '#059669', bg: data.discrepancy > 0 ? '#fef2f2' : '#ecfdf5', icon: '&#9888;&#65039;', absolute: true },
-    { label: 'Potential Recovery', value: data.potentialRecovery, color: '#d97706', bg: '#fffbeb', icon: '&#128200;' },
+    { label: 'Expected Total', value: data.expected, color: '#2563eb', bg: '#eff6ff', icon: '\uD83D\uDCB0' },
+    { label: 'Actual Credited', value: data.actual, color: '#059669', bg: '#ecfdf5', icon: '\u2705' },
+    { label: 'Discrepancy', value: data.discrepancy, color: data.discrepancy > 0 ? '#dc2626' : '#059669', bg: data.discrepancy > 0 ? '#fef2f2' : '#ecfdf5', icon: '\u26A0\uFE0F', absolute: true },
+    { label: 'Potential Recovery', value: data.potentialRecovery, color: '#d97706', bg: '#fffbeb', icon: '\uD83D\uDCC8' },
   ];
 
   return (
@@ -48,7 +48,7 @@ function CashFlowImpact({ status }) {
             border: `1px solid ${m.color}33`,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '1.2rem', marginBottom: 2 }} dangerouslySetInnerHTML={{ __html: m.icon }} />
+            <div style={{ fontSize: '1.2rem', marginBottom: 2 }}>{m.icon}</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: m.color, fontFamily: "'SF Mono', monospace" }}>
               {formatCurrency(m.absolute ? m.value : m.value)}
             </div>

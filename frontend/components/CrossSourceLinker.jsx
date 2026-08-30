@@ -6,28 +6,32 @@ function CrossSourceLinker({ status }) {
   const cleanCount = results.filter(r => r.decision_state === 'CLEAN_MATCH').length;
   const exceptionCount = results.length - cleanCount;
 
+  const csvCounts = status.csv_counts || {};
   const sources = React.useMemo(() => {
     return [
-      { name: 'transactions.csv', label: 'Transactions', color: '#2563eb', icon: '&#128196;', count: 186, desc: 'Internal transaction records' },
-      { name: 'settlements.csv', label: 'Settlements', color: '#7c3aed', icon: '&#128179;', count: 80, desc: 'Settlement batch data' },
-      { name: 'refunds.csv', label: 'Refunds', color: '#dc2626', icon: '&#128176;', count: 23, desc: 'Refund transaction records' },
-      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#059669', icon: '&#127974;', count: 80, desc: 'Bank credit statements' },
+      { name: 'transactions.csv', label: 'Transactions', color: '#2563eb', icon: '\uD83D\uDCC4', count: csvCounts.transactions || 0, desc: 'Internal transaction records' },
+      { name: 'settlements.csv', label: 'Settlements', color: '#7c3aed', icon: '\uD83D\uDCB0', count: csvCounts.settlements || 0, desc: 'Settlement batch data' },
+      { name: 'refunds.csv', label: 'Refunds', color: '#dc2626', icon: '\uD83D\uDCB8', count: csvCounts.refunds || 0, desc: 'Refund transaction records' },
+      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#059669', icon: '\uD83C\uDFE6', count: csvCounts.bank_credits || 0, desc: 'Bank credit statements' },
     ];
-  }, []);
+  }, [csvCounts.transactions, csvCounts.settlements, csvCounts.refunds, csvCounts.bank_credits]);
 
   const linkedPairs = React.useMemo(() => {
     const pairs = [];
     const sample = results.slice(0, Math.min(20, results.length));
     for (let i = 0; i < sample.length; i++) {
       const r = sample[i];
+      // Transaction → Settlement link (every settlement has a transaction)
       if (i > 0) {
         pairs.push({ from: 0, to: 1, fromIdx: i, toIdx: i, color: r.decision_state === 'CLEAN_MATCH' ? '#4ade80' : '#fbbf24' });
       }
+      // Settlement → Bank Credit link (when difference is non-zero, bank credit matters)
       if (r.difference_paise !== 0) {
         pairs.push({ from: 1, to: 3, fromIdx: i, toIdx: i, color: '#f87171' });
       }
-      if (i % 3 === 0) {
-        pairs.push({ from: 1, to: 2, fromIdx: i, toIdx: Math.floor(i / 3), color: '#94a3b8' });
+      // Settlement → Refund link (only when refund-related checks failed)
+      if (r.deterministic_checks_failed && r.deterministic_checks_failed.some(c => c.includes('refund'))) {
+        pairs.push({ from: 1, to: 2, fromIdx: i, toIdx: i, color: '#94a3b8' });
       }
     }
     return pairs;
@@ -98,7 +102,7 @@ function CrossSourceLinker({ status }) {
               onMouseEnter={() => setHovered(i)}
               onMouseLeave={() => setHovered(null)}
             >
-              <div style={{ fontSize: '1.4rem', marginBottom: 4 }} dangerouslySetInnerHTML={{ __html: src.icon }} />
+              <div style={{ fontSize: '1.4rem', marginBottom: 4 }}>{src.icon}</div>
               <div style={{ fontWeight: 700, fontSize: '0.82rem', color: src.color }}>{src.label}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{src.name}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>{src.desc}</div>

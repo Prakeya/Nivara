@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 import uuid
 import time
 from collections import defaultdict
@@ -24,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -33,7 +34,7 @@ from backend.audit import AuditLogger
 from backend.batch_analyzer import analyze_batch
 from backend.engine import run_engine
 from backend.ingestion import IngestionResult, ingest_csvs
-from backend.models import HumanReviewDecision, ResolutionStatus
+from backend.models import HumanReviewDecision, ResolutionStatus, ReviewDecision
 
 logger = logging.getLogger("nivara.api")
 
@@ -74,12 +75,14 @@ class JobResult:
     ai_investigations: int = 0
     ai_auto_approved: int = 0
     match_rate: float = 0.0
+    csv_counts: dict = field(default_factory=dict)
     results: list[dict] = field(default_factory=list)
     batch_analysis: dict = field(default_factory=dict)
     audit_records: list[dict] = field(default_factory=list)
 
 
 _jobs: dict[str, JobResult] = {}
+_jobs_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Rate limiting (simple in-memory sliding window)
@@ -154,8 +157,7 @@ def _get_llm_client():
     """Return the production LLM client based on environment configuration.
 
     - If OPENAI_API_KEY is set → OpenAIClient (real LLM)
-    - If OPENAI_API_KEY is missing → DemoLLMClient (heuristic, clearly labeled MOCK)
-    - Never crashes the application.
+    - If OPENAI_API_KEY is missing → None (AI investigation skipped)
     """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
@@ -164,9 +166,7 @@ def _get_llm_client():
             return OpenAIClient(api_key=api_key)
         except Exception:
             pass
-    # Fallback: deterministic heuristic client for demo mode
-    from backend.ai_investigator import DemoLLMClient
-    return DemoLLMClient()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +210,21 @@ def _result_to_dict(r, gt_label: str | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+_NIVARA_API_KEY = os.environ.get("NIVARA_API_KEY", "")
+
+async def verify_auth(request: Request):
+    """Verify API key via X-API-Key header. Skip if NIVARA_API_KEY is not set."""
+    if not _NIVARA_API_KEY:
+        return  # No auth configured — open access
+    api_key = request.headers.get("X-API-Key", "")
+    if api_key != _NIVARA_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+# ---------------------------------------------------------------------------
 # POST /upload
 # ---------------------------------------------------------------------------
 
@@ -220,6 +235,7 @@ async def upload_files(
     settlements: UploadFile = File(...),
     refunds: UploadFile = File(...),
     bank_credits: UploadFile = File(...),
+    _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Accept 4 CSV files, process reconciliation, return job_id."""
     # Rate limit check
@@ -277,18 +293,19 @@ async def upload_files(
         upload_hash = _compute_hash(file_paths)
 
         # Job eviction: cap at MAX_JOBS, evict oldest
-        if len(_jobs) >= MAX_JOBS:
-            oldest_ids = sorted(_jobs.keys(), key=lambda k: _jobs[k].created_at)[:len(_jobs) // 4]
-            for old_id in oldest_ids:
-                _jobs.pop(old_id, None)
+        with _jobs_lock:
+            if len(_jobs) >= MAX_JOBS:
+                oldest_ids = sorted(_jobs.keys(), key=lambda k: _jobs[k].created_at)[:len(_jobs) // 4]
+                for old_id in oldest_ids:
+                    _jobs.pop(old_id, None)
 
-        job = JobResult(
-            job_id=job_id,
-            status="processing",
-            upload_hash=upload_hash,
-            created_at=created_at,
-        )
-        _jobs[job_id] = job
+            job = JobResult(
+                job_id=job_id,
+                status="processing",
+                upload_hash=upload_hash,
+                created_at=created_at,
+            )
+            _jobs[job_id] = job
 
         # Ingest (sync CSV parsing — offload to threadpool)
         ingestion: IngestionResult = await asyncio.to_thread(
@@ -309,6 +326,14 @@ async def upload_files(
             bank_credits=ingestion.bank_credits,
             llm_client=llm_client,
         )
+
+        # Store CSV row counts for frontend display
+        csv_counts = {
+            "transactions": len(ingestion.transactions),
+            "settlements": len(ingestion.settlements),
+            "refunds": len(ingestion.refunds),
+            "bank_credits": len(ingestion.bank_credits),
+        }
 
         # Batch analysis
         patterns = await asyncio.to_thread(analyze_batch, results)
@@ -368,8 +393,8 @@ async def upload_files(
                     batch_start = time.time()
                     metrics = evaluate_batch(results, gt_list, batch_time_seconds=0.0, ai_client_available=llm_client is not None)
                     match_rate = metrics.match_rate
-            except Exception:
-                pass  # Ground truth not available or mismatched — skip
+            except Exception as exc:
+                logger.warning("Ground truth evaluation failed: %s", exc)  # Ground truth not available or mismatched — skip
 
         job.status = "completed"
         job.total_settlements = len(results)
@@ -380,6 +405,7 @@ async def upload_files(
         job.ai_investigations = ai_inv
         job.ai_auto_approved = ai_auto
         job.match_rate = match_rate
+        job.csv_counts = csv_counts
         job.results = [_result_to_dict(r, gt_label=gt_map.get(r.settlement_id)) for r in results]
         job.batch_analysis = batch_analysis
         job.audit_records = audit_records
@@ -388,7 +414,8 @@ async def upload_files(
         raise  # Let HTTP exceptions propagate as-is
     except Exception as exc:
         logger.exception("Upload processing failed for job %s", job_id)
-        job = _jobs.get(job_id)
+        with _jobs_lock:
+            job = _jobs.get(job_id)
         if job:
             job.status = "error"
             job.error = "An internal error occurred during processing. Check server logs for details."
@@ -416,7 +443,8 @@ async def get_status(job_id: str) -> JSONResponse:
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid job ID format: {job_id}")
 
-    job = _jobs.get(job_id)
+    with _jobs_lock:
+        job = _jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -441,6 +469,14 @@ async def get_status(job_id: str) -> JSONResponse:
         content["results"] = job.results
         content["batch_analysis"] = job.batch_analysis
         content["audit_records"] = job.audit_records
+        # Compute blind spots from ground truth labels
+        blind_spots = sum(
+            1 for r in job.results
+            if r.get("gt_label") in ("refund_after_settlement", "timing_race")
+        )
+        content["blind_spots"] = blind_spots
+        # CSV row counts from file ingestion
+        content["csv_counts"] = job.csv_counts
         # Determine ai_mode from results
         ai_modes = {r.get("ai_mode") for r in job.results if r.get("ai_mode")}
         content["ai_mode"] = "demo" if "demo" in ai_modes else ("live" if "live" in ai_modes else None)
@@ -525,9 +561,8 @@ _human_reviews: dict[str, HumanReviewDecision] = {}
 async def submit_human_review(
     request: Request,
     settlement_id: str,
-    decision: str,
-    reason: str,
-    reviewer_id: str = "anonymous",
+    body: ReviewDecision,
+    _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Submit a human review decision for a settlement.
 
@@ -539,11 +574,9 @@ async def submit_human_review(
     if not _rate_limiter.check_api(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
 
-    # Validate parameter lengths
-    if len(reason) > MAX_REVIEW_REASON_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Reason exceeds maximum length of {MAX_REVIEW_REASON_LENGTH} characters.")
-    if len(reviewer_id) > MAX_REVIEWER_ID_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Reviewer ID exceeds maximum length of {MAX_REVIEWER_ID_LENGTH} characters.")
+    decision = body.decision
+    reason = body.reason
+    reviewer_id = body.reviewer_id
 
     valid_decisions = {"APPROVE", "REJECT", "MODIFY"}
     if decision.upper() not in valid_decisions:

@@ -14,13 +14,13 @@ from backend.ai_investigator import (
     investigate,
     compute_confidence_tier,
     validate_citations,
-    MockLLMClient,
     LLMTimeoutError,
     LLMAPIError,
     LLMMalformedResponseError,
     LLMError,
     InvestigationResult,
 )
+from tests.mocks import MockLLMClient
 from backend.engine import run_engine, reconcile_settlement
 from backend.models import (
     AIClassification,
@@ -508,8 +508,8 @@ class TestProductionLLMPath:
         sig = inspect.signature(run_engine)
         assert "llm_client" in sig.parameters
 
-    def test_engine_none_llm_falls_back_to_demo(self):
-        """When llm_client is None, DemoLLMClient is used as fallback."""
+    def test_engine_none_llm_skips_ai_investigation(self):
+        """When llm_client is None, AI investigation is skipped and result is escalated to human."""
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
         bc = _bank_credit("UTR_001", 100500)
@@ -517,14 +517,14 @@ class TestProductionLLMPath:
         results = run_engine([t], [s], [], [bc], llm_client=None)
 
         assert len(results) == 1
-        assert results[0].decision == DecisionState.REVIEW_REQUIRED
+        assert results[0].decision == DecisionState.MATH_DISCREPANCY
         assert results[0].escalate_to_human is True
-        assert results[0].ai_mode == "demo"
-        assert results[0].ai_response is not None
+        assert results[0].ai_response is None
+        assert results[0].ai_mode is None
 
     def test_engine_mock_llm_produces_review_required(self):
         """When MockLLMClient is provided, MATH_DISCREPANCY becomes REVIEW_REQUIRED."""
-        from backend.ai_investigator import MockLLMClient
+        from tests.mocks import MockLLMClient
 
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
@@ -543,32 +543,30 @@ class TestProductionLLMPath:
         assert results[0].ai_response is not None
         assert results[0].escalate_to_human is True
 
-    def test_missing_api_key_returns_demo_client(self):
-        """_get_llm_client() returns DemoLLMClient when OPENAI_API_KEY is not set."""
+    def test_missing_api_key_returns_none(self):
+        """_get_llm_client() returns None when OPENAI_API_KEY is not set."""
         import os
         from backend.main import _get_llm_client
-        from backend.ai_investigator import DemoLLMClient
 
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
             client = _get_llm_client()
-            assert isinstance(client, DemoLLMClient)
+            assert client is None
         finally:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key
 
-    def test_invalid_api_key_returns_demo_client(self):
-        """_get_llm_client() returns DemoLLMClient when OpenAIClient instantiation fails."""
+    def test_invalid_api_key_returns_openai_client(self):
+        """_get_llm_client() returns OpenAIClient even with invalid key (validated at call time)."""
         import os
         from backend.main import _get_llm_client
-        from backend.ai_investigator import DemoLLMClient
+        from backend.ai_investigator import OpenAIClient
 
         old_key = os.environ.get("OPENAI_API_KEY")
         os.environ["OPENAI_API_KEY"] = "sk-test-invalid-key-for-testing"
         try:
-            # Should not crash - returns DemoLLMClient (heuristic fallback)
             client = _get_llm_client()
-            assert isinstance(client, DemoLLMClient) or hasattr(client, "complete")
+            assert isinstance(client, OpenAIClient)
         finally:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key
@@ -619,41 +617,3 @@ class TestProductionLLMPath:
                 cited_evidence=["timing"],
                 expected_amount_paise=100000,  # forbidden field
             )
-
-
-# ---------------------------------------------------------------------------
-# DemoLLMClient auto-resolve tests
-# ---------------------------------------------------------------------------
-
-class TestDemoLLMClientAutoResolve:
-    def test_trivial_case_auto_resolves_via_investigate(self):
-        """investigate() with DemoLLMClient auto-resolves when difference <= 1 paise."""
-        from backend.ai_investigator import DemoLLMClient, investigate
-
-        client = DemoLLMClient()
-        ep = _make_evidence_packet(expected=100000, actual=100001)
-        ep.deterministic_checks_failed = []
-        result = investigate(ep, llm_client=client)
-        assert result.decision == DecisionState.AUTO_RESOLVED
-        assert result.escalate_to_human is False
-
-    def test_non_trivial_case_does_not_auto_resolve(self):
-        """investigate() with DemoLLMClient does NOT auto-resolve when difference is large."""
-        from backend.ai_investigator import DemoLLMClient, investigate
-
-        client = DemoLLMClient()
-        ep = _make_evidence_packet(expected=100000, actual=95000)
-        result = investigate(ep, llm_client=client)
-        assert result.decision != DecisionState.AUTO_RESOLVED
-        assert result.escalate_to_human is True
-
-    def test_zero_difference_auto_resolves(self):
-        """investigate() with DemoLLMClient auto-resolves when difference is exactly 0."""
-        from backend.ai_investigator import DemoLLMClient, investigate
-
-        client = DemoLLMClient()
-        ep = _make_evidence_packet(expected=100000, actual=100000)
-        ep.deterministic_checks_failed = []
-        result = investigate(ep, llm_client=client)
-        assert result.decision == DecisionState.AUTO_RESOLVED
-        assert result.escalate_to_human is False
