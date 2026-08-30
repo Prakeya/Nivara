@@ -81,3 +81,25 @@ class TestPromptRegistryGlobal:
         r1 = get_registry()
         r2 = get_registry()
         assert r1 is r2
+
+
+class TestGroqSystemPrompt:
+    """Real prompts/v1/system.md is optimized for Llama/Mistral JSON compliance."""
+
+    def test_v1_system_prompt_has_json_hardening(self) -> None:
+        prompt = get_prompt("v1/system")
+        assert "STRICT JSON ONLY" in prompt
+        assert "```json fences" in prompt
+        assert "single quotes" in prompt
+        assert "double quotes" in prompt
+        assert prompt.count("{") > 0
+
+    def test_v1_system_prompt_mentions_only_valid_classifications(self) -> None:
+        prompt = get_prompt("v1/system")
+        for cls in ("TIMING_MISMATCH", "REFUND_TIMING", "UNEXPLAINED"):
+            assert cls in prompt
+
+    def test_v1_system_prompt_forbids_markdown(self) -> None:
+        prompt = get_prompt("v1/system")
+        assert "markdown" in prompt.lower()
+        assert "Anything except text before or after" in prompt or "text before or after" in prompt.lower()
