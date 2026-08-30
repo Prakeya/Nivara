@@ -8,6 +8,7 @@ Tests verify frontend is served correctly by FastAPI.
 import csv
 import io
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,45 +48,48 @@ class TestFrontendServing:
 
     def test_index_contains_react(self):
         response = client.get("/")
-        assert "react" in response.text.lower()
-        assert "root" in response.text
+        # Vite production build: module entry + root mount point
+        assert "id=\"root\"" in response.text
+        assert "<script" in response.text
 
     def test_index_loads_all_components(self):
         response = client.get("/")
-        # Vite build: single entry point instead of individual script tags
-        assert "main.jsx" in response.text
+        # Vite build: single hashed bundle under /assets
+        assert "/assets/" in response.text
+        assert '"root"' in response.text
+
+    def test_built_assets_served(self):
+        index = client.get("/").text
+        assets = re.findall(r'(?:src|href)="(/assets/[^"]+)"', index)
+        assert assets, "no assets referenced by built index.html"
+        for asset in assets:
+            response = client.get(asset)
+            assert response.status_code == 200, f"asset not served: {asset}"
+
+    def test_bundle_contains_all_components(self):
+        index = client.get("/").text
+        match = re.search(r'src="(/assets/[^"]+\.js)"', index)
+        assert match, "no hashed JS bundle referenced"
+        bundle = client.get(match.group(1)).text
+        # Component identifiers are minified; assert on the stable
+        # section markers and dashboard data fields they render.
+        for marker in [
+            "Agent Reasoning Trace",
+            "decision_state",
+            "escalate_to_human",
+            "audit_records",
+            "batch_analysis",
+            "deterministic_checks_failed",
+            "total_settlements",
+            "exceptions",
+        ]:
+            assert marker in bundle
+
+    def test_spa_fallback_serves_index(self):
+        response = client.get("/some/client/route")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
         assert "root" in response.text
-
-    def test_app_jsx_served(self):
-        response = client.get("/static/App.jsx")
-        assert response.status_code == 200
-        assert len(response.text) > 0
-
-    def test_upload_panel_served(self):
-        response = client.get("/static/components/UploadPanel.jsx")
-        assert response.status_code == 200
-        assert "UploadPanel" in response.text
-
-    def test_results_table_served(self):
-        response = client.get("/static/components/ResultsTable.jsx")
-        assert response.status_code == 200
-        assert "ResultsTable" in response.text
-        assert "HeroMetrics" in response.text
-
-    def test_review_queue_served(self):
-        response = client.get("/static/components/ReviewQueue.jsx")
-        assert response.status_code == 200
-        assert "ReviewQueue" in response.text
-
-    def test_audit_trace_served(self):
-        response = client.get("/static/components/AuditTrace.jsx")
-        assert response.status_code == 200
-        assert "AuditTrace" in response.text
-
-    def test_batch_patterns_served(self):
-        response = client.get("/static/components/BatchPatterns.jsx")
-        assert response.status_code == 200
-        assert "BatchPatterns" in response.text
 
     def test_health_still_works(self):
         response = client.get("/health")

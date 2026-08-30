@@ -750,13 +750,22 @@ async def get_review_status(request: Request, settlement_id: str) -> JSONRespons
 # ---------------------------------------------------------------------------
 
 _frontend_dir = Path(__file__).parent.parent / "frontend"
+_dist_dir = _frontend_dir / "dist"
+_assets_dir = _dist_dir / "assets"
 
-app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
+# Prefer the Vite production build (frontend/dist) when present; fall back to
+# the legacy dev layout (frontend/index.html + /static) otherwise.
+_LIVE_FRONTEND = _assets_dir.is_dir()
+
+if _LIVE_FRONTEND:
+    app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+else:
+    app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def serve_index():
-    index_path = _frontend_dir / "index.html"
+    index_path = (_dist_dir if _LIVE_FRONTEND else _frontend_dir) / "index.html"
     return HTMLResponse(content=index_path.read_text())
 
 
@@ -880,3 +889,31 @@ async def v1_get_audit(upload_hash: str, page: int = 1, page_size: int = 50):
     finally:
         audit.close()
     return paginate(items, page, page_size)
+
+
+# ---------------------------------------------------------------------------
+# SPA fallback: serve the frontend index for unknown non-API routes
+# ---------------------------------------------------------------------------
+
+_API_PREFIXES = (
+    "api/",
+    "upload/",
+    "status/",
+    "audit/",
+    "v1/",
+    "health",
+    "metrics/",
+    "static/",
+    "assets/",
+    "docs",
+    "redoc",
+    "openapi.json",
+)
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
+def serve_spa_fallback(full_path: str):
+    if full_path.startswith(_API_PREFIXES):
+        raise HTTPException(status_code=404, detail="Resource not found")
+    index_path = (_dist_dir if _LIVE_FRONTEND else _frontend_dir) / "index.html"
+    return HTMLResponse(content=index_path.read_text())
