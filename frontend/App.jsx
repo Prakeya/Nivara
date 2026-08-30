@@ -15,6 +15,52 @@ function ToastContainer({ toasts, onDismiss }) {
   );
 }
 
+/* ── Blind Spot Modal ── */
+function BlindSpotModal({ results, onClose }) {
+  if (!results) return null;
+  const blindSpots = results.filter(r => r.gt_label === "refund_after_settlement" || r.gt_label === "timing_race");
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: '1rem', fontWeight: 700 }}>Blind Spot Settlements</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{blindSpots.length} known false negatives &mdash; engine cannot detect these</div>
+          </div>
+          <button className="btn btn-sm" onClick={onClose}>&times;</button>
+        </div>
+        <div style={{ padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 'var(--radius)', border: '1px solid #fecaca', fontSize: '0.8rem', color: 'var(--red)', marginBottom: 12 }}>
+          These settlements appear clean to the deterministic engine but have exceptions in ground truth. They require live LLM investigation or additional business rules to catch.
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '2px solid var(--border)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Settlement ID</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '2px solid var(--border)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ground Truth Label</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '2px solid var(--border)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Expected</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '2px solid var(--border)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {blindSpots.map((r, i) => (
+              <tr key={r.settlement_id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 600 }}>{r.settlement_id}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  <span className="badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+                    {r.gt_label === "refund_after_settlement" ? "Refund After Settlement" : "Timing Race"}
+                  </span>
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{'\u20B9'}{(r.expected_amount_paise / 100).toLocaleString('en-IN')}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{'\u20B9'}{(r.actual_amount_paise / 100).toLocaleString('en-IN')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ── ReconciliationTrace ── */
 function ReconciliationTrace({ result, onBack, onReview }) {
   if (!result) return (
@@ -169,6 +215,8 @@ function App() {
   const [health, setHealth] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [streamedIds, setStreamedIds] = useState(new Set());
+  const [showBlindSpots, setShowBlindSpots] = useState(false);
   const toastId = useRef(0);
 
   const addToast = useCallback((message, type = "info") => {
@@ -224,6 +272,7 @@ function App() {
     setJobId(null);
     setStatus(null);
     setSelected(null);
+    setStreamedIds(new Set());
   }, []);
 
   const handleHumanReview = useCallback(async (settlementId, decision) => {
@@ -296,6 +345,10 @@ function App() {
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
+      {showBlindSpots && status && (
+        <BlindSpotModal results={status.results} onClose={() => setShowBlindSpots(false)} />
+      )}
+
       {status && status.ai_mode === "demo" && !bannerDismissed && (
         <div style={{background:'#fef3c7', borderBottom:'1px solid #fcd34d', padding:'8px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.85rem', color:'#92400e'}}>
           <span>
@@ -329,13 +382,14 @@ function App() {
 
         {view === "dashboard" && hasData && !loading && (
           <>
-            <HeroMetrics status={status} />
+            <HeroMetrics status={status} onBlindSpotClick={() => setShowBlindSpots(true)} />
             <CashFlowImpact status={status} />
-            <SettlementSimulator results={status.results} />
+            <SettlementSimulator results={status.results} streamedIds={streamedIds} onStreamedIdsChange={setStreamedIds} />
             <ResultsTable
               results={status.results}
               selectedId={selected?.settlement_id}
               onSelect={(r) => { setSelected(r); setPrevView("dashboard"); setView("trace"); }}
+              streamedIds={streamedIds}
             />
           </>
         )}

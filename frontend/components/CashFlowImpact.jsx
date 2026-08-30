@@ -5,19 +5,19 @@ function CashFlowImpact({ status }) {
     const results = status.results;
     const expected = results.reduce((s, r) => s + r.expected_amount_paise, 0);
     const actual = results.reduce((s, r) => s + r.actual_amount_paise, 0);
-    const discrepancy = expected - actual;
+    const discrepancy = Math.abs(expected - actual);
     const clean = results.filter(r => r.decision_state === 'CLEAN_MATCH');
     const exceptions = results.filter(r => r.decision_state !== 'CLEAN_MATCH');
 
-    const avgExpected = clean.length > 0 ? clean.reduce((s, r) => s + r.expected_amount_paise, 0) / clean.length : 0;
+    // Recovery from caught exceptions only (not blind spots which have diff=0)
     const potentialRecovery = exceptions.reduce((s, r) => s + Math.abs(r.difference_paise), 0);
+    const recoveryRate = discrepancy > 0 ? (potentialRecovery / discrepancy * 100) : 0;
 
     return {
       expected, actual, discrepancy, potentialRecovery,
       cleanCount: clean.length,
       exceptionCount: exceptions.length,
-      avgSettlement: avgExpected,
-      recoveryRate: expected > 0 ? (potentialRecovery / expected * 100) : 0,
+      recoveryRate,
     };
   }, [status]);
 
@@ -26,11 +26,9 @@ function CashFlowImpact({ status }) {
   const metrics = [
     { label: 'Expected Total', value: data.expected, color: '#2563eb', bg: '#eff6ff', icon: '&#128176;' },
     { label: 'Actual Credited', value: data.actual, color: '#059669', bg: '#ecfdf5', icon: '&#9989;' },
-    { label: 'Discrepancy', value: data.discrepancy, color: data.discrepancy > 0 ? '#dc2626' : '#059669', bg: data.discrepancy > 0 ? '#fef2f2' : '#ecfdf5', icon: '&#9888;&#65039;', isDiff: true },
+    { label: 'Discrepancy', value: data.discrepancy, color: data.discrepancy > 0 ? '#dc2626' : '#059669', bg: data.discrepancy > 0 ? '#fef2f2' : '#ecfdf5', icon: '&#9888;&#65039;', absolute: true },
     { label: 'Potential Recovery', value: data.potentialRecovery, color: '#d97706', bg: '#fffbeb', icon: '&#128200;' },
   ];
-
-  const barMax = Math.max(data.expected, data.actual, 1);
 
   return (
     <div className="card" style={{ borderLeft: '3px solid #059669' }}>
@@ -52,7 +50,7 @@ function CashFlowImpact({ status }) {
           }}>
             <div style={{ fontSize: '1.2rem', marginBottom: 2 }} dangerouslySetInnerHTML={{ __html: m.icon }} />
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: m.color, fontFamily: "'SF Mono', monospace" }}>
-              {m.isDiff && data.discrepancy > 0 ? '-' : ''}{formatCurrency(m.value)}
+              {formatCurrency(m.absolute ? m.value : m.value)}
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>
               {m.label}

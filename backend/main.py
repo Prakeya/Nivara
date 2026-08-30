@@ -179,7 +179,7 @@ def _compute_hash(file_paths: list[str]) -> str:
     return compute_upload_hash(file_paths)
 
 
-def _result_to_dict(r) -> dict:
+def _result_to_dict(r, gt_label: str | None = None) -> dict:
     """Convert ReconciliationResult to JSON-safe dict."""
     d = {
         "settlement_id": r.settlement_id,
@@ -192,6 +192,8 @@ def _result_to_dict(r) -> dict:
         "escalate_to_human": r.escalate_to_human,
         "ai_mode": getattr(r, "ai_mode", None),
     }
+    if gt_label is not None:
+        d["gt_label"] = gt_label
     if r.ai_response is not None:
         d["ai_response"] = {
             "classification": r.ai_response.classification.value
@@ -350,6 +352,7 @@ async def upload_files(
 
         # Compute match rate against ground truth if available
         match_rate = 0.0
+        gt_map = {}
         gt_path = os.path.join("data", "evaluation", "ground_truth.json")
         if not os.path.exists(gt_path):
             gt_path = os.path.join("data", "demo", "ground_truth.json")
@@ -359,6 +362,7 @@ async def upload_files(
                 with open(gt_path) as _f:
                     gt_data = _json.load(_f)
                 gt_list = gt_data if isinstance(gt_data, list) else gt_data.get("ground_truth", [])
+                gt_map = {item["settlement_id"]: item.get("label") for item in gt_list if "settlement_id" in item}
                 if len(gt_list) == len(results):
                     from backend.evaluation import evaluate_batch
                     batch_start = time.time()
@@ -376,7 +380,7 @@ async def upload_files(
         job.ai_investigations = ai_inv
         job.ai_auto_approved = ai_auto
         job.match_rate = match_rate
-        job.results = [_result_to_dict(r) for r in results]
+        job.results = [_result_to_dict(r, gt_label=gt_map.get(r.settlement_id)) for r in results]
         job.batch_analysis = batch_analysis
         job.audit_records = audit_records
 
