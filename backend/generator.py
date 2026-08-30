@@ -511,6 +511,8 @@ def _gen_fee_mismatch(
         if j == 0 and n_payments > 1:
             # Inject fee mismatch on first payment
             wrong_fee = fee_correct + rng.choice([-1, 1]) * max(1, rng.randint(1, 50))
+            if wrong_fee < 0:
+                wrong_fee = fee_correct + rng.randint(1, 50)
             t = _make_transaction(pid, amount, method, created_at,
                                   settlement_id=sid, fee_override=wrong_fee)
             mismatch_pid = pid
