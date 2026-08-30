@@ -433,6 +433,8 @@ class GroqClient:
 
         client = self._get_sdk_client()
         serve_model = model or self._model
+        from backend.metrics import record_groq_usage, record_llm_call_metric
+
         start = time.monotonic()
         try:
             response = client.chat.completions.create(
@@ -443,6 +445,8 @@ class GroqClient:
                 max_tokens=1024,
             )
         except Exception as exc:
+            latency_ms = int((time.monotonic() - start) * 1000)
+            record_llm_call_metric("error", latency_ms)
             msg = str(exc).lower()
             if "timeout" in msg or "timed out" in msg:
                 raise GroqTimeoutError(str(exc)) from exc
@@ -451,6 +455,7 @@ class GroqClient:
             raise GroqAPIError(str(exc)) from exc
 
         latency_ms = int((time.monotonic() - start) * 1000)
+        record_llm_call_metric("ok", latency_ms)
 
         text = response.choices[0].message.content or ""
         usage = response.usage
@@ -459,6 +464,7 @@ class GroqClient:
 
         # Post-call: deduct actual tokens used
         self._rate_limiter.post_call(tokens_in, tokens_out)
+        record_groq_usage(tokens_in + tokens_out, serve_model)
 
         return {
             "text": text,
