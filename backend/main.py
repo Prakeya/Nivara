@@ -20,6 +20,7 @@ import threading
 import uuid
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -38,10 +39,23 @@ from backend.models import HumanReviewDecision, ResolutionStatus, ReviewDecision
 
 logger = logging.getLogger("nivara.api")
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Fail fast at boot if GROQ_API_KEY is missing (WATCH-G4)."""
+    try:
+        _validate_llm_config()
+    except RuntimeError as exc:
+        logger.error("Startup LLM validation failed: %s", exc)
+        raise
+    logger.info("Groq configuration validated")
+    yield
+
+
 app = FastAPI(
     title="Nivara",
     description="AI Settlement Intelligence Agent",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------
@@ -154,17 +168,38 @@ def _get_audit_logger() -> AuditLogger:
 
 
 def _get_llm_client():
-    """Return a truthy value if any LLM provider is available.
+    """Return a truthy value if Groq is available.
 
-    The new architecture uses a fallback chain (OpenAI → Anthropic → Local).
-    This function returns a non-None value if any API key is configured,
-    which signals to run_engine that AI investigation should be enabled.
+    The architecture uses a Groq-first fallback chain (70B → 8B → UNRESOLVED).
+    Returns "configured" when GROQ_API_KEY is set, which signals to run_engine
+    that AI investigation should be enabled.
     """
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    if openai_key or anthropic_key:
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key:
         return "configured"
     return None
+
+
+def _validate_llm_config() -> None:
+    """
+    Fail-fast GROQ_API_KEY validation at startup (WATCH-G4).
+
+    Raises:
+        RuntimeError: when GROQ_API_KEY is missing/empty or the Groq SDK is
+        unavailable. The deterministic engine still works, but AI investigation
+        (MATH_DISCREPANCY) would be permanently UNRESOLVED — surface loudly at
+        boot instead. Key validity is confirmed on the first real API call.
+    """
+    from backend.groq_client import GroqClient
+
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not groq_key:
+        raise RuntimeError(
+            "GROQ_API_KEY is not set. Nivara requires a Groq API key for AI "
+            "investigation. Set GROQ_API_KEY in the environment or a .env file."
+        )
+    # Instantiation fails fast if the groq SDK is not installed.
+    GroqClient(api_key=groq_key)
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +351,17 @@ async def upload_files(
 
         # Run engine with real LLM client (or None if no API key)
         llm_client = _get_llm_client()
+        if llm_client is not None:
+            n_settlements = len(ingestion.settlements)
+            if n_settlements:
+                from backend.groq_client import check_batch_feasible
+                try:
+                    check_batch_feasible(n_settlements)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Batch rejected under Groq free-tier budget: {exc}",
+                    ) from exc
         results = await asyncio.to_thread(
             run_engine,
             transactions=ingestion.transactions,

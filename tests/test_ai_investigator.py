@@ -548,34 +548,34 @@ class TestProductionLLMPath:
         mock_inv.assert_called_once()
 
     def test_missing_api_key_returns_none(self):
-        """_get_llm_client() returns None when OPENAI_API_KEY is not set."""
+        """_get_llm_client() returns None when GROQ_API_KEY is not set."""
         import os
         from backend.main import _get_llm_client
 
-        old_key = os.environ.pop("OPENAI_API_KEY", None)
+        old_key = os.environ.pop("GROQ_API_KEY", None)
         try:
             client = _get_llm_client()
             assert client is None
         finally:
             if old_key is not None:
-                os.environ["OPENAI_API_KEY"] = old_key
+                os.environ["GROQ_API_KEY"] = old_key
 
     def test_invalid_api_key_returns_configured(self):
-        """_get_llm_client() returns truthy value when OPENAI_API_KEY is set."""
+        """_get_llm_client() returns truthy value when GROQ_API_KEY is set."""
         import os
         from backend.main import _get_llm_client
 
-        old_key = os.environ.get("OPENAI_API_KEY")
-        os.environ["OPENAI_API_KEY"] = "sk-test-invalid-key-for-testing"
+        old_key = os.environ.get("GROQ_API_KEY")
+        os.environ["GROQ_API_KEY"] = "gsk-test-invalid-key-for-testing"
         try:
             client = _get_llm_client()
             assert client is not None
             assert client  # truthy
         finally:
             if old_key is not None:
-                os.environ["OPENAI_API_KEY"] = old_key
+                os.environ["GROQ_API_KEY"] = old_key
             else:
-                os.environ.pop("OPENAI_API_KEY", None)
+                os.environ.pop("GROQ_API_KEY", None)
 
     def test_investigate_with_none_returns_unresolved(self):
         """investigate() with llm_client=None returns UNRESOLVED."""

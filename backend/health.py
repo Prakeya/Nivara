@@ -25,20 +25,24 @@ def check_database() -> dict[str, Any]:
 
 
 def check_llm() -> dict[str, Any]:
-    """Check LLM provider connectivity (if configured)."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+    """Check LLM provider connectivity (Groq, if configured)."""
+    from backend.groq_client import GroqClient, GroqError
+
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         return {"status": "not_configured", "provider": "none"}
     try:
-        from openai import OpenAI
+        client = GroqClient(api_key=api_key)
+        sdk = client._get_sdk_client()
         start = time.time()
-        client = OpenAI(api_key=api_key)
         # Lightweight models list call
-        client.models.list()
+        sdk.models.list()
         latency_ms = round((time.time() - start) * 1000, 2)
-        return {"status": "ok", "provider": "openai", "latency_ms": latency_ms}
+        return {"status": "ok", "provider": "groq", "latency_ms": latency_ms}
+    except GroqError as e:
+        return {"status": "error", "provider": "groq", "error": str(e)}
     except Exception as e:
-        return {"status": "error", "provider": "openai", "error": str(e)}
+        return {"status": "error", "provider": "groq", "error": str(e)}
 
 
 def check_disk() -> dict[str, Any]:
