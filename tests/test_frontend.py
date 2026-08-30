@@ -52,12 +52,9 @@ class TestFrontendServing:
 
     def test_index_loads_all_components(self):
         response = client.get("/")
-        assert "UploadPanel.jsx" in response.text
-        assert "ResultsTable.jsx" in response.text
-        assert "ReviewQueue.jsx" in response.text
-        assert "AuditTrace.jsx" in response.text
-        assert "BatchPatterns.jsx" in response.text
-        assert "App.jsx" in response.text
+        # Vite build: single entry point instead of individual script tags
+        assert "main.jsx" in response.text
+        assert "root" in response.text
 
     def test_app_jsx_served(self):
         response = client.get("/static/App.jsx")
