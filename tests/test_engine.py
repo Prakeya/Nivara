@@ -674,7 +674,9 @@ class TestBatchEngine:
         assert results[1].decision == DecisionState.CLEAN_MATCH
 
     def test_mixed_outcomes(self):
-        from tests.mocks import MockLLMClient
+        from unittest.mock import patch
+        from backend.models import AIResponse, AIClassification
+
         t1 = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         t2 = _txn("PAY_002", amount=100000, method="upi", fee=0, tax=1)
         s1 = _settlement("SETL_001", amount=100000, linked_pids=["PAY_001"])
@@ -682,14 +684,14 @@ class TestBatchEngine:
         bc1 = _bank_credit("UTR_001", 100000)
         bc2 = _bank_credit("UTR_002", 100000)
 
-        results = run_engine([t1, t2], [s1, s2], [], [bc1, bc2], llm_client=MockLLMClient())
+        results = run_engine([t1, t2], [s1, s2], [], [bc1, bc2], llm_client="mock")
 
         assert len(results) == 2
         assert results[0].decision == DecisionState.CLEAN_MATCH
-        # DETERMINISTIC_EXCEPTION gets AI investigation → REVIEW_REQUIRED
-        assert results[1].decision == DecisionState.REVIEW_REQUIRED
+        # DETERMINISTIC_EXCEPTION is FINAL — no AI invoked (deterministic guard rule 1)
+        assert results[1].decision == DecisionState.DETERMINISTIC_EXCEPTION
         assert "tax_validation" in results[1].deterministic_checks_failed
-        assert results[1].ai_response is not None
+        assert results[1].escalate_to_human is True
 
     def test_empty_batch(self):
         results = run_engine([], [], [], [])
@@ -931,31 +933,29 @@ class TestDuplicateBankUTRSafety:
 # ---------------------------------------------------------------------------
 
 class TestAIInvestigationExceptionFallback:
-    """If investigate() raises unexpectedly, settlement becomes UNRESOLVED."""
+    """If investigate_v2() raises unexpectedly, settlement becomes UNRESOLVED."""
 
     def test_ai_investigation_exception_becomes_unresolved(self):
-        from tests.mocks import MockLLMClient
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=99999, linked_pids=["PAY_001"])
         bc = _bank_credit("UTR_001", 99999)
 
-        with patch("backend.ai_investigator.investigate", side_effect=RuntimeError("LLM down")):
-            results = run_engine([t], [s], [], [bc], llm_client=MockLLMClient())
+        with patch("backend.ai_investigator.investigate_v2", side_effect=RuntimeError("LLM down")):
+            results = run_engine([t], [s], [], [bc], llm_client="mock")
 
         assert len(results) == 1
         assert results[0].decision == DecisionState.UNRESOLVED
         assert results[0].escalate_to_human is True
 
     def test_ai_investigation_exception_logs_warning(self, caplog):
-        from tests.mocks import MockLLMClient
         import logging
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=99999, linked_pids=["PAY_001"])
         bc = _bank_credit("UTR_001", 99999)
 
         with caplog.at_level(logging.WARNING, logger="nivara.engine"):
-            with patch("backend.ai_investigator.investigate", side_effect=RuntimeError("LLM down")):
-                run_engine([t], [s], [], [bc], llm_client=MockLLMClient())
+            with patch("backend.ai_investigator.investigate_v2", side_effect=RuntimeError("LLM down")):
+                run_engine([t], [s], [], [bc], llm_client="mock")
 
         assert any("AI investigation failed" in rec.message for rec in caplog.records)
 

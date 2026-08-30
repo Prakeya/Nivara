@@ -21,11 +21,14 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Optional, Protocol
 from uuid import uuid4
+
+logger = logging.getLogger("nivara.ai_investigator")
 
 from backend.models import (
     AIClassification,
@@ -942,4 +945,74 @@ class OpenAIClient:
                 raise LLMAPIError(str(e))
             else:
                 raise LLMError("unknown_error", str(e))
+
+
+# ---------------------------------------------------------------------------
+# investigate_v2: New architecture using EvidencePacketV2
+# ---------------------------------------------------------------------------
+
+def investigate_v2(
+    evidence_packet_v2: "EvidencePacketV2",
+    expected_amount_paise: int,
+    actual_amount_paise: int,
+    difference_paise: int,
+) -> Optional[AIResponse]:
+    """
+    Investigate a MATH_DISCREPANCY using EvidencePacketV2.
+
+    This is the new architecture function. It:
+    1. Builds a prompt from EvidencePacketV2
+    2. Calls LLM via fallback chain (OpenAI → Anthropic → Local)
+    3. Validates response via AI Validator
+    4. Returns AIResponse or None (no heuristic fallback)
+
+    Requires OPENAI_API_KEY or ANTHROPIC_API_KEY environment variables.
+    """
+    from backend.evidence_packet import EvidencePacketV2
+    from backend.fallback_chain import call_with_fallback, ProviderConfig
+    from backend.ai_validator import validate_ai_response
+    from backend.prompt_registry import get_prompt, get_prompt_version
+
+    # Build prompt from evidence packet
+    system_prompt = get_prompt("v1/system")
+    evidence_text = evidence_packet_v2.serialize_for_prompt()
+    user_prompt = (
+        f"Settlement: {evidence_packet_v2.settlement_id}\n"
+        f"Expected amount: {expected_amount_paise} paise\n"
+        f"Actual amount: {actual_amount_paise} paise\n"
+        f"Difference: {difference_paise} paise\n\n"
+        f"Evidence:\n{evidence_text}\n\n"
+        f"Analyze the discrepancy and return JSON with classification, explanation, confidence, and cited_evidence."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    # Call LLM via fallback chain
+    fallback_result = call_with_fallback(messages=messages)
+    if not fallback_result.success:
+        logger.warning("All LLM providers failed for %s", evidence_packet_v2.settlement_id)
+        return None
+
+    # Validate response
+    prompt_version = get_prompt_version("v1/system")
+    validation = validate_ai_response(
+        raw_response=fallback_result.response,
+        evidence_packet=evidence_packet_v2,
+        provider=fallback_result.provider,
+        prompt_version=prompt_version,
+        latency_ms=fallback_result.latency_ms,
+    )
+
+    if validation.ai_response is None:
+        logger.warning(
+            "AI validation failed for %s: %s",
+            evidence_packet_v2.settlement_id,
+            validation.error,
+        )
+        return None
+
+    return validation.ai_response
 

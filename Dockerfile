@@ -9,7 +9,7 @@ COPY backend/ backend/
 COPY frontend/ frontend/
 COPY data/evaluation/ data/evaluation/
 COPY tests/ ./tests/
-COPY demo.py ./demo.py
+COPY scripts/demo.py ./scripts/demo.py
 
 EXPOSE 8000
 

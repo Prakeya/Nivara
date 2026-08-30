@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.evidence_packet import EvidencePacketV2
+
 
 class TransactionStatus(str, Enum):
     CAPTURED = "captured"
@@ -292,6 +294,12 @@ class AIResponse(BaseModel):
     raw_confidence: float = Field(ge=0.0, le=1.0)
     cited_evidence: list[str]
     recommended_action: Literal[AIRecommendedAction.ESCALATE_TO_HUMAN] = AIRecommendedAction.ESCALATE_TO_HUMAN
+    prompt_version: str = "unknown"
+    tokens_in: int = Field(default=0, ge=0)
+    tokens_out: int = Field(default=0, ge=0)
+    provider_name: str = "unknown"
+    cost_inr: float = Field(default=0.0, ge=0.0)
+    latency_ms: int = Field(default=0, ge=0)
 
     @field_validator("raw_confidence")
     @classmethod
@@ -325,6 +333,7 @@ class ReconciliationResult(BaseModel):
     auto_approved_by_ai: int = Field(default=0, ge=0, le=0)
     agent_iterations: int = Field(default=0, ge=0)
     agent_tool_calls: int = Field(default=0, ge=0)
+    evidence_packet: Optional[EvidencePacketV2] = None
 
     @model_validator(mode="after")
     def validate_difference_consistency(self) -> "ReconciliationResult":

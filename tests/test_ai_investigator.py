@@ -522,26 +522,30 @@ class TestProductionLLMPath:
         assert results[0].ai_response is None
         assert results[0].ai_mode is None
 
-    def test_engine_mock_llm_produces_review_required(self):
-        """When MockLLMClient is provided, MATH_DISCREPANCY becomes REVIEW_REQUIRED."""
-        from tests.mocks import MockLLMClient
+    def test_engine_mock_llm_produces_math_discrepancy(self):
+        """When fallback chain succeeds, MATH_DISCREPANCY stays as MATH_DISCREPANCY with ai_response."""
+        from unittest.mock import patch, MagicMock
+        from backend.models import AIResponse, AIClassification
 
         t = _txn("PAY_001", amount=100000, method="upi", fee=0, tax=0)
         s = _settlement("SETL_001", amount=100500, utr="UTR_001", linked_pids=["PAY_001"])
         bc = _bank_credit("UTR_001", 100500)
 
-        mock_llm = MockLLMClient(
-            classification="UNEXPLAINED",
-            explanation="Test",
-            confidence=0.5,
-            cited_evidence=["timing"],
+        mock_ai = AIResponse(
+            classification=AIClassification.UNEXPLAINED,
+            explanation="Test discrepancy",
+            raw_confidence=0.5,
+            cited_evidence=["fee_evidence"],
         )
-        results = run_engine([t], [s], [], [bc], llm_client=mock_llm)
+
+        with patch("backend.ai_investigator.investigate_v2", return_value=mock_ai) as mock_inv:
+            results = run_engine([t], [s], [], [bc], llm_client="mock")
 
         assert len(results) == 1
-        assert results[0].decision == DecisionState.REVIEW_REQUIRED
+        assert results[0].decision == DecisionState.MATH_DISCREPANCY
         assert results[0].ai_response is not None
         assert results[0].escalate_to_human is True
+        mock_inv.assert_called_once()
 
     def test_missing_api_key_returns_none(self):
         """_get_llm_client() returns None when OPENAI_API_KEY is not set."""
@@ -556,17 +560,17 @@ class TestProductionLLMPath:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key
 
-    def test_invalid_api_key_returns_openai_client(self):
-        """_get_llm_client() returns OpenAIClient even with invalid key (validated at call time)."""
+    def test_invalid_api_key_returns_configured(self):
+        """_get_llm_client() returns truthy value when OPENAI_API_KEY is set."""
         import os
         from backend.main import _get_llm_client
-        from backend.ai_investigator import OpenAIClient
 
         old_key = os.environ.get("OPENAI_API_KEY")
         os.environ["OPENAI_API_KEY"] = "sk-test-invalid-key-for-testing"
         try:
             client = _get_llm_client()
-            assert isinstance(client, OpenAIClient)
+            assert client is not None
+            assert client  # truthy
         finally:
             if old_key is not None:
                 os.environ["OPENAI_API_KEY"] = old_key

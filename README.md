@@ -168,7 +168,7 @@ open http://localhost:8000
 ### One-Command Demo
 
 ```bash
-python3 demo.py
+python3 scripts/demo.py
 ```
 
 This will:
@@ -235,11 +235,12 @@ Nivara/
 │       ├── ReviewQueue.jsx
 │       ├── AuditTrace.jsx
 │       └── BatchPatterns.jsx
-├── tests/                   — 505 tests
+├── scripts/
+│   └── demo.py                — One-command demo script
+├── tests/                   — 581 tests
 ├── data/
 │   ├── demo/                — Demo dataset (80 settlements)
 │   └── evaluation/          — Evaluation dataset with ground truth
-├── demo.py                  — One-command demo script
 └── README.md
 ```
 

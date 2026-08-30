@@ -123,20 +123,27 @@ class TestDemoScenario:
             assert len(r.deterministic_checks_failed) == 0
 
     def test_ai_investigations_present(self):
-        """Some settlements trigger AI investigation when llm_client is provided."""
-        from tests.mocks import MockLLMClient
+        """Some settlements trigger AI investigation when fallback chain succeeds."""
+        from unittest.mock import patch
+        from backend.models import AIResponse, AIClassification
+
         data = generate_batch(seed=42)
-        results = run_engine(
-            data["transactions"],
-            data["settlements"],
-            data["refunds"],
-            data["bank_credits"],
-            llm_client=MockLLMClient(classification="UNEXPLAINED", confidence=0.5),
+        mock_ai = AIResponse(
+            classification=AIClassification.UNEXPLAINED,
+            explanation="Test",
+            raw_confidence=0.5,
+            cited_evidence=["fee_evidence"],
         )
+        with patch("backend.ai_investigator.investigate_v2", return_value=mock_ai):
+            results = run_engine(
+                data["transactions"],
+                data["settlements"],
+                data["refunds"],
+                data["bank_credits"],
+                llm_client="mock",
+            )
 
         ai_count = sum(1 for r in results if r.ai_response is not None)
-        # With a mock LLM client, we expect some AI investigations
-        # (the AI investigator is called for MATH_DISCREPANCY and REVIEW_REQUIRED cases)
         assert ai_count > 0, "Expected at least one AI investigation in demo batch"
 
     def test_all_settled_results_escalate(self):
