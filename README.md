@@ -180,6 +180,29 @@ The audit trail — SHA-256 hash-chained, write-once records — is storage-agno
 
 ---
 
+## Load Testing
+
+Measured with `scripts/load_test.py` against a single local process (see below
+to reproduce). Endpoints exercised: `/health`, `/api/metrics`, `/v1/jobs`, `/`.
+
+| Concurrency | Requests/sec | Avg latency | p95 | p99 | Errors |
+|---|---|---|---|---|---|
+| 16 concurrent | **2,260** | 7.1 ms | 7.5 ms | 9.0 ms | 0 |
+
+```bash
+# 1. Start the server
+GROQ_API_KEY=... PYTHONPATH="$(pwd)" uvicorn backend.main:app --port 8000
+
+# 2. Hammer it (dependency-free, stdlib only)
+python3 scripts/load_test.py --base http://localhost:8000 \
+    --duration 15 --concurrency 16 --warmup 2
+```
+
+A heavier variant ships in `tests/load/` — `locustfile.py` (Locust) and
+`load_test.js` (k6) with staged ramp-ups and p95 thresholds.
+
+---
+
 ## Safety Architecture
 
 ### 1. AI Never Calculates Money
