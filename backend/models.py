@@ -467,6 +467,15 @@ class HumanReviewDecision(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now())
 
 
+class ReviewDecision(BaseModel):
+    """Request body for human review submission."""
+    model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
+
+    decision: str  # "APPROVE" | "REJECT" | "MODIFY"
+    reason: str = Field(max_length=500)
+    reviewer_id: str = Field(default="anonymous", max_length=100)
+
+
 class LoopClosureMetrics(BaseModel):
     """Metrics for loop closure tracking."""
     model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)

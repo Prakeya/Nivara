@@ -393,9 +393,9 @@ def run_engine(
     5. Catches crashes → UNPROCESSED
 
     Args:
-        llm_client: LLM provider for AI investigation. If None, falls back to
-            DemoLLMClient (deterministic heuristic classifier). In production,
-            pass OpenAIClient; in tests, pass MockLLMClient.
+        llm_client: LLM provider for AI investigation. If None, AI investigation
+            is skipped and non-clean settlements are escalated to human review.
+            In production, pass OpenAIClient; in tests, pass a mock client.
         max_workers: Number of parallel workers for settlement reconciliation.
         settlement_cycle_days: Expected settlement cycle in days (default 2 for T+2).
             Use 1 for T+1 settlements.
@@ -457,14 +457,19 @@ def run_engine(
             results.append(future.result())
 
     # Phase 7: AI investigation for MATH_DISCREPANCY and DETERMINISTIC_EXCEPTION cases
-    from backend.ai_investigator import investigate, DemoLLMClient
+    from backend.ai_investigator import investigate
     from backend.models import (
         EvidencePacket, LinkedPaymentsSummary, LinkedRefundsSummary,
         FeesSummary, TaxSummary, BankCreditEvidence, TimingEvidence,
         PaymentMethod, ValidationResult, PaymentDetail, CrossSettlementContext,
     )
 
-    effective_llm_client = llm_client if llm_client is not None else DemoLLMClient()
+    # Skip AI investigation if no LLM client provided
+    if llm_client is None:
+        for result in results:
+            if result.decision in (DecisionState.MATH_DISCREPANCY, DecisionState.DETERMINISTIC_EXCEPTION):
+                result.escalate_to_human = True
+        return results
 
     # Build cross-settlement statistics (data the per-settlement engine cannot see)
     total_results = len(results)
@@ -592,7 +597,7 @@ def run_engine(
                     )
 
                     ai_result = investigate(
-                        evidence, llm_client=effective_llm_client, batch_memory=batch_memory,
+                        evidence, llm_client=llm_client, batch_memory=batch_memory,
                     )
                     if ai_result.ai_response is not None:
                         result.ai_response = ai_result.ai_response

@@ -6,7 +6,7 @@ function HeroMetrics({ status, onBlindSpotClick }) {
     : total > 0
       ? (((status.clean_matches + status.exceptions) / total) * 100).toFixed(1)
       : "0.0";
-  const blindSpots = 10;
+  const blindSpots = status.blind_spots || 0;
   // Blind spots are a subset of engine CLEAN_MATCH (false negatives).
   // True clean = engine clean - blind spots. Caught exceptions = all REVIEW_REQUIRED.
   const trueClean = status.clean_matches - blindSpots;
@@ -32,7 +32,7 @@ function HeroMetrics({ status, onBlindSpotClick }) {
         </div>
         <div className="metric red" style={{ cursor: 'pointer' }} onClick={onBlindSpotClick}>
           <div className="value">{blindSpots}</div>
-          <div className="label">Blind Spots <span className="info-tip" title="Known false negatives: refund_after_settlement (5) + timing_race (5). The deterministic engine cannot catch these — they require live LLM investigation or additional business rules. Click to view all 10.">&#9432;</span></div>
+          <div className="label">Blind Spots <span className="info-tip" title={`Known false negatives: ${blindSpots} settlements the deterministic engine cannot catch. They require live LLM investigation or additional business rules. Click to view all ${blindSpots}.`}>&#9432;</span></div>
           <div className="metric-sub">{pct(blindSpots)}% (known) &bull; <span style={{color:'var(--blue)', textDecoration:'underline'}}>View</span></div>
         </div>
         <div className="metric purple">

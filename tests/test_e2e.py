@@ -123,17 +123,19 @@ class TestDemoScenario:
             assert len(r.deterministic_checks_failed) == 0
 
     def test_ai_investigations_present(self):
-        """Some settlements trigger AI investigation."""
+        """Some settlements trigger AI investigation when llm_client is provided."""
+        from tests.mocks import MockLLMClient
         data = generate_batch(seed=42)
         results = run_engine(
             data["transactions"],
             data["settlements"],
             data["refunds"],
             data["bank_credits"],
+            llm_client=MockLLMClient(classification="UNEXPLAINED", confidence=0.5),
         )
 
         ai_count = sum(1 for r in results if r.ai_response is not None)
-        # With the demo data, we expect some AI investigations
+        # With a mock LLM client, we expect some AI investigations
         # (the AI investigator is called for MATH_DISCREPANCY and REVIEW_REQUIRED cases)
         assert ai_count > 0, "Expected at least one AI investigation in demo batch"
 
@@ -240,7 +242,7 @@ class TestE2EHumanReview:
             # Submit review
             review_resp = test_client.post(
                 f"/api/review/{sid}/decision",
-                params={"decision": "APPROVE", "reason": "E2E test", "reviewer_id": "e2e_test"},
+                json={"decision": "APPROVE", "reason": "E2E test", "reviewer_id": "e2e_test"},
             )
             assert review_resp.status_code == 200
 

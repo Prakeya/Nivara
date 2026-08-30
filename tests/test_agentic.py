@@ -19,8 +19,6 @@ from backend.ai_investigator import (
     investigate,
     compute_confidence_tier,
     validate_citations,
-    MockLLMClient,
-    DemoLLMClient,
     LLMTimeoutError,
     LLMAPIError,
     LLMMalformedResponseError,
@@ -35,6 +33,7 @@ from backend.ai_investigator import (
     MAX_AGENT_ITERATIONS,
     AUTO_RESOLVE_CONFIDENCE_THRESHOLD,
 )
+from tests.mocks import MockLLMClient
 from backend.models import (
     AIClassification,
     AIRecommendedAction,
@@ -320,14 +319,14 @@ class TestInvestigationResult:
         result = investigate(ep, llm_client=client)
         assert result.confidence_tier == "TIER_1"
 
-    def test_investigate_with_demo_client(self):
-        """DemoLLMClient should work for investigation."""
+    def test_investigate_with_mock_client(self):
+        """MockLLMClient should work for investigation."""
         ep = _make_evidence()
-        result = investigate(ep, llm_client=DemoLLMClient())
+        result = investigate(ep, llm_client=MockLLMClient())
         assert result.decision in (
             DecisionState.REVIEW_REQUIRED, DecisionState.AUTO_RESOLVED,
         )
-        assert result.is_mock is True
+        assert result.is_mock is False
 
     def test_investigate_with_no_client(self):
         """No LLM client should return UNRESOLVED."""
@@ -610,7 +609,7 @@ class TestMaxIterations:
 class TestMockLLMClientAgentLoop:
     def test_tool_calls_sequence(self):
         """MockLLMClient should handle tool call sequences."""
-        from backend.ai_investigator import MockLLMClient
+        from tests.mocks import MockLLMClient
 
         client = MockLLMClient(
             classification="UNEXPLAINED",
@@ -628,7 +627,7 @@ class TestMockLLMClientAgentLoop:
 
     def test_call_history_tracked(self):
         """MockLLMClient should track call history."""
-        from backend.ai_investigator import MockLLMClient
+        from tests.mocks import MockLLMClient
 
         client = MockLLMClient(
             classification="UNEXPLAINED",
