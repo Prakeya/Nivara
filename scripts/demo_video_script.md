@@ -18,7 +18,7 @@ pytest run.
 
 ```
 PYTHONPATH="." python3 -m pytest -q
-691 passed in 4.25s
+699 passed in 4.25s
 ```
 
 > **VO (over the pass):** "That's the first thing the code does. Now the
@@ -82,6 +82,6 @@ scripts/load_test.py → 2,260 req/s · p95 7.5 ms · 0 errors
 > **VO:** "And because the whole thing is groq-free-tier cost for the LLM, the
 > Metrics tab shows a live cost of ₹0.00. Nivara: money math is deterministic,
 > AI is advisory, and everything is auditable. Clean code that works — from the
-> first commit to the 691st test."
+> first commit to the 699th test."
 
 **Final card:** `github.com/Prakeya/Nivara`
