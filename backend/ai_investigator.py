@@ -30,6 +30,7 @@ from uuid import uuid4
 
 logger = logging.getLogger("nivara.ai_investigator")
 
+from backend.evidence_packet import EvidencePacketV2
 from backend.models import (
     AIClassification,
     AIRecommendedAction,
@@ -67,9 +68,9 @@ class LLMClient(Protocol):
 
     def complete(
         self,
-        messages: list[dict],
+        messages: list[dict[str, Any]],
         evidence_packet: Optional[EvidencePacket] = None,
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
         """Send a prompt to the LLM and return the parsed response dict.
@@ -165,7 +166,7 @@ def validate_citations(
 # Agent Tools — typed functions the LLM can call
 # ---------------------------------------------------------------------------
 
-def verify_utr_cross_source(evidence: EvidencePacket) -> dict:
+def verify_utr_cross_source(evidence: EvidencePacket) -> dict[str, Any]:
     """Verify UTR consistency between settlement and bank credit."""
     bc = evidence.bank_credit
     timing = evidence.timing
@@ -184,7 +185,7 @@ def verify_utr_cross_source(evidence: EvidencePacket) -> dict:
     }
 
 
-def calculate_expected_fee(amount_paise: int, method: str) -> dict:
+def calculate_expected_fee(amount_paise: int, method: str) -> dict[str, Any]:
     """Calculate expected fee for a payment amount and method."""
     fee_structure = {
         "upi": {"rate_num": 0, "rate_den": 1, "fixed": 0},
@@ -208,7 +209,7 @@ def calculate_expected_fee(amount_paise: int, method: str) -> dict:
     }
 
 
-def check_gst_compliance(fee_paise: int, tax_paise: int) -> dict:
+def check_gst_compliance(fee_paise: int, tax_paise: int) -> dict[str, Any]:
     """Check if tax follows floor(fee * 0.18) rule."""
     expected_tax = (fee_paise * 18) // 100
     compliant = tax_paise == expected_tax
@@ -223,7 +224,7 @@ def check_gst_compliance(fee_paise: int, tax_paise: int) -> dict:
     }
 
 
-def query_batch_pattern(exception_type: str, evidence: EvidencePacket) -> dict:
+def query_batch_pattern(exception_type: str, evidence: EvidencePacket) -> dict[str, Any]:
     """Query batch-level patterns for context."""
     cross = evidence.cross_settlement
     if not cross:
@@ -246,7 +247,7 @@ def query_batch_pattern(exception_type: str, evidence: EvidencePacket) -> dict:
     }
 
 
-def request_human_escalation(reason: str, evidence: EvidencePacket) -> dict:
+def request_human_escalation(reason: str, evidence: EvidencePacket) -> dict[str, Any]:
     """Request human escalation with reason and evidence summary."""
     return {
         "tool": "request_human_escalation",
@@ -258,7 +259,7 @@ def request_human_escalation(reason: str, evidence: EvidencePacket) -> dict:
     }
 
 
-def auto_resolve_trivial(resolution: dict) -> dict:
+def auto_resolve_trivial(resolution: dict[str, Any]) -> dict[str, Any]:
     """Auto-resolve a trivial case. ONLY for Tier 1 confidence."""
     return {
         "tool": "auto_resolve_trivial",
@@ -270,7 +271,7 @@ def auto_resolve_trivial(resolution: dict) -> dict:
 
 
 # Tool registry
-AGENT_TOOLS: dict[str, Callable] = {
+AGENT_TOOLS: dict[str, Callable[..., Any]] = {
     "verify_utr_cross_source": lambda args, ep: verify_utr_cross_source(ep),
     "calculate_expected_fee": lambda args, ep: calculate_expected_fee(
         args.get("amount_paise", 0), args.get("method", "upi")
@@ -288,7 +289,7 @@ AGENT_TOOLS: dict[str, Callable] = {
 }
 
 
-def get_tool_definitions() -> list[dict]:
+def get_tool_definitions() -> list[dict[str, Any]]:
     """Return tool definitions for the LLM."""
     return [
         {
@@ -405,9 +406,9 @@ def _build_system_prompt() -> str:
 
 def _build_agent_messages(
     evidence_packet: EvidencePacket,
-    previous_steps: Optional[list[dict]] = None,
+    previous_steps: Optional[list[dict[str, Any]]] = None,
     batch_memory: Optional[str] = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Build messages for the agent loop, using EvidencePacket directly."""
     ep = evidence_packet
 
@@ -514,7 +515,7 @@ def _build_agent_messages(
 # Response validation — v2 with reasoning steps
 # ---------------------------------------------------------------------------
 
-def _validate_agent_response(raw: dict[str, Any]) -> tuple[AIResponse, list[dict]]:
+def _validate_agent_response(raw: dict[str, Any]) -> tuple[AIResponse, list[dict[str, Any]]]:
     """Validate and parse LLM response into AIResponse + reasoning steps.
     Raises LLMMalformedResponseError on invalid data."""
     try:
@@ -538,13 +539,6 @@ def _validate_agent_response(raw: dict[str, Any]) -> tuple[AIResponse, list[dict
     if not isinstance(cited_evidence, list):
         raise LLMMalformedResponseError("cited_evidence must be a list")
 
-    # Parse recommended action
-    action_str = raw.get("recommended_action", "ESCALATE_TO_HUMAN")
-    try:
-        recommended_action = AIRecommendedAction(action_str)
-    except ValueError:
-        recommended_action = AIRecommendedAction.ESCALATE_TO_HUMAN
-
     # Clamp confidence to [0.0, 1.0]
     confidence = max(0.0, min(1.0, confidence))
 
@@ -559,7 +553,7 @@ def _validate_agent_response(raw: dict[str, Any]) -> tuple[AIResponse, list[dict
             explanation=explanation,
             raw_confidence=confidence,
             cited_evidence=cited_evidence,
-            recommended_action=recommended_action,
+            recommended_action=AIRecommendedAction.ESCALATE_TO_HUMAN,
         ),
         reasoning_steps,
     )
@@ -571,7 +565,7 @@ def _validate_agent_response(raw: dict[str, Any]) -> tuple[AIResponse, list[dict
 
 def _execute_tool_call(
     tool_name: str,
-    tool_args: dict,
+    tool_args: dict[str, Any],
     evidence_packet: EvidencePacket,
 ) -> ToolResult:
     """Execute a single tool call and return the result."""
@@ -615,9 +609,9 @@ def _run_agent_loop(
     Returns:
         (AgentResponse, iteration_count, tool_call_count)
     """
-    steps: list[dict] = []
+    steps: list[dict[str, Any]] = []
     total_tool_calls = 0
-    previous_steps_for_prompt: list[dict] = []
+    previous_steps_for_prompt: list[dict[str, Any]] = []
 
     for iteration in range(1, MAX_AGENT_ITERATIONS + 1):
         messages = _build_agent_messages(
@@ -810,7 +804,7 @@ def investigate(
         explanation=agent_response.explanation,
         raw_confidence=agent_response.raw_confidence,
         cited_evidence=agent_response.cited_evidence,
-        recommended_action=agent_response.recommended_action,
+        recommended_action=AIRecommendedAction.ESCALATE_TO_HUMAN,
     )
 
     # Validate citations
@@ -919,9 +913,9 @@ class OpenAIClient:
 
     def complete(
         self,
-        messages: list[dict],
+        messages: list[dict[str, Any]],
         evidence_packet: Optional[EvidencePacket] = None,
-        tools: Optional[list[dict]] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
         import json as _json
@@ -936,7 +930,7 @@ class OpenAIClient:
         try:
             response = self._client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content
-            return _json.loads(content)
+            return _json.loads(content)  # type: ignore[no-any-return]
         except Exception as e:
             error_msg = str(e).lower()
             if "timeout" in error_msg or "timed out" in error_msg:

@@ -16,7 +16,7 @@ Detects linkage errors:
 """
 
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Optional
 from enum import Enum
 
 
@@ -34,12 +34,12 @@ class LinkageResult:
 
     def __init__(self, settlement_id: str):
         self.settlement_id = settlement_id
-        self.linked_payments: list[dict] = []
-        self.linked_refunds: list[dict] = []
-        self.bank_credit: Optional[dict] = None
-        self.errors: list[dict] = []
+        self.linked_payments: list[dict[str, Any]] = []
+        self.linked_refunds: list[dict[str, Any]] = []
+        self.bank_credit: Optional[dict[str, Any]] = None
+        self.errors: list[dict[str, Any]] = []
 
-    def add_error(self, error_type: LinkageError, message: str, field: str = "", entity_id: str = ""):
+    def add_error(self, error_type: LinkageError, message: str, field: str = "", entity_id: str = "") -> None:
         self.errors.append({
             "error_type": error_type.value,
             "message": message,
@@ -52,19 +52,19 @@ class LinkageResult:
         return len(self.errors) > 0
 
 
-def build_payment_index(transactions: list[dict]) -> dict[str, dict]:
+def build_payment_index(transactions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Build payment_id → transaction index."""
     return {t["payment_id"]: t for t in transactions}
 
 
-def build_refund_index(refunds: list[dict]) -> dict[str, list[dict]]:
+def build_refund_index(refunds: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Build refund_id → refund index."""
     return {r["refund_id"]: r for r in refunds}
 
 
-def build_refunds_by_payment_index(refunds: list[dict]) -> dict[str, list[dict]]:
+def build_refunds_by_payment_index(refunds: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     """Build payment_id → list of refunds index."""
-    index: dict[str, list[dict]] = {}
+    index: dict[str, list[dict[str, Any]]] = {}
     for r in refunds:
         pid = r["payment_id"]
         if pid not in index:
@@ -73,7 +73,7 @@ def build_refunds_by_payment_index(refunds: list[dict]) -> dict[str, list[dict]]
     return index
 
 
-def detect_payment_overclaims(settlements: list[dict]) -> list[dict]:
+def detect_payment_overclaims(settlements: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Detect PAYMENT_OVERCLAIM: Same payment_id in multiple settlements' linked_payment_ids.
     Returns list of error dicts.
@@ -98,9 +98,9 @@ def detect_payment_overclaims(settlements: list[dict]) -> list[dict]:
 
 
 def detect_refund_overages(
-    transactions: list[dict],
-    refunds: list[dict],
-) -> list[dict]:
+    transactions: list[dict[str, Any]],
+    refunds: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Detect REFUND_OVERAGE: Sum of refunds for a payment > payment amount.
     Returns list of error dicts.
@@ -124,9 +124,9 @@ def detect_refund_overages(
 
 
 def detect_cross_check_mismatches(
-    transactions: list[dict],
-    settlements: list[dict],
-) -> list[dict]:
+    transactions: list[dict[str, Any]],
+    settlements: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Detect LINKAGE_MISMATCH: transactions.settlement_id disagrees with
     settlements.linked_payment_ids.
@@ -169,7 +169,7 @@ def detect_cross_check_mismatches(
     return errors
 
 
-def _parse_date(d) -> date:
+def _parse_date(d: str) -> date:
     """Parse a date from various formats into a date object."""
     if isinstance(d, date) and not isinstance(d, datetime):
         return d
@@ -194,9 +194,9 @@ def _dates_within_2_days(d1: date, d2: date) -> bool:
 
 
 def link_bank_credit(
-    settlement: dict,
-    bank_credits: list[dict],
-) -> Optional[dict]:
+    settlement: dict[str, Any],
+    bank_credits: list[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
     """
     Link a bank credit to a settlement.
 
@@ -231,11 +231,11 @@ def link_bank_credit(
 
 
 def link_settlement(
-    settlement: dict,
-    payment_index: dict[str, dict],
-    refund_index: dict[str, dict],
-    refunds_by_payment: dict[str, list[dict]],
-    bank_credits: list[dict],
+    settlement: dict[str, Any],
+    payment_index: dict[str, dict[str, Any]],
+    refund_index: dict[str, dict[str, Any]],
+    refunds_by_payment: dict[str, list[dict[str, Any]]],
+    bank_credits: list[dict[str, Any]],
 ) -> LinkageResult:
     """
     Link all entities for a single settlement.
@@ -284,10 +284,10 @@ def link_settlement(
 
 
 def link_entities(
-    transactions: list[dict],
-    settlements: list[dict],
-    refunds: list[dict],
-    bank_credits: list[dict],
+    transactions: list[dict[str, Any]],
+    settlements: list[dict[str, Any]],
+    refunds: list[dict[str, Any]],
+    bank_credits: list[dict[str, Any]],
 ) -> list[LinkageResult]:
     """
     Run entity linking across all settlements.

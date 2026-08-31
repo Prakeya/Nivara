@@ -23,10 +23,10 @@ def is_postgres() -> bool:
 
 
 @contextmanager
-def get_connection() -> Generator:
+def get_connection() -> Generator[Any, None, None]:
     """Yield a database connection. Auto-commits on success, rolls back on error."""
     if is_postgres():
-        import psycopg2
+        import psycopg2  # type: ignore[import-untyped]
         conn = psycopg2.connect(DATABASE_URL)
         try:
             yield conn
@@ -84,16 +84,16 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_settlement_id ON audit_log (settlement_id)")
 
 
-def execute_query(sql: str, params: tuple = (), fetch: bool = False) -> list[tuple]:
+def execute_query(sql: str, params: tuple[str, ...] = (), fetch: bool = False) -> list[tuple[Any, ...]]:
     """Execute a query. Returns rows if fetch=True."""
     with get_connection() as conn:
         cursor = conn.execute(sql, params)
         if fetch:
-            return cursor.fetchall()
+            return cursor.fetchall()  # type: ignore[no-any-return]
         return []
 
 
-def execute_many(sql: str, params_list: list[tuple]) -> None:
+def execute_many(sql: str, params_list: list[tuple[str, ...]]) -> None:
     """Execute many inserts in a single transaction."""
     with get_connection() as conn:
         conn.executemany(sql, params_list)

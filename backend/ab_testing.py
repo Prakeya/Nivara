@@ -36,11 +36,11 @@ class ABTestConfig:
 
     @property
     def enabled(self) -> bool:
-        return self._config.get("enabled", False)
+        return self._config.get("enabled", False)  # type: ignore[no-any-return]
 
     @property
     def default_model(self) -> str:
-        return self._config.get("default_model", "gpt-4o-mini")
+        return self._config.get("default_model", "gpt-4o-mini")  # type: ignore[no-any-return]
 
     def get_model_for_settlement(self, settlement_id: str) -> str:
         """Deterministically assign a model based on settlement_id hash."""
@@ -52,18 +52,18 @@ class ABTestConfig:
             return self.default_model
 
         # Deterministic hash-based routing
-        h = int(hashlib.md5(settlement_id.encode()).hexdigest()[:8], 16)
+        h = int(hashlib.md5(settlement_id.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         roll = (h % 10000) / 10000.0  # 0.0 to 1.0
 
         cumulative = 0.0
         for variant_name, variant_config in variants.items():
             cumulative += variant_config.get("traffic_pct", 0)
             if roll < cumulative:
-                return variant_config.get("model", self.default_model)
+                return variant_config.get("model", self.default_model)  # type: ignore[no-any-return]
 
         return self.default_model
 
-    def record_result(self, settlement_id: str, model: str, metrics: dict) -> None:
+    def record_result(self, settlement_id: str, model: str, metrics: dict[str, Any]) -> None:
         """Record A/B test results (latency, cost, accuracy)."""
         # In production, write to metrics store
         pass

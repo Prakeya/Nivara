@@ -14,7 +14,7 @@ from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from backend.models import (
     Transaction,
@@ -164,17 +164,17 @@ class ValidationError:
         self.message = message
         self.error_type = error_type
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Line {self.line}: [{self.error_type}] {self.field}: {self.message}"
 
 
 class ValidationResult:
     """Result of CSV validation."""
-    def __init__(self):
+    def __init__(self) -> None:
         self.errors: list[ValidationError] = []
         self.records: list[dict[str, Any]] = []
 
-    def add_error(self, line: int, field: str, message: str, error_type: str = "VALIDATION_ERROR"):
+    def add_error(self, line: int, field: str, message: str, error_type: str = "VALIDATION_ERROR") -> None:
         self.errors.append(ValidationError(line, field, message, error_type))
 
     @property
@@ -532,10 +532,10 @@ def validate_bank_credits(df: pd.DataFrame, start_line: int = 2) -> ValidationRe
 # Duplicate detection
 # ---------------------------------------------------------------------------
 
-def detect_duplicates(records: list[dict], key_field: str, file_type: str, start_line: int = 2) -> list[ValidationError]:
+def detect_duplicates(records: list[dict[str, Any]], key_field: str, file_type: str, start_line: int = 2) -> list[ValidationError]:
     """Detect duplicate IDs within a file."""
     errors = []
-    seen = {}
+    seen: dict[Any, int] = {}
     for i, record in enumerate(records):
         key = record.get(key_field)
         if key in seen:
@@ -552,8 +552,8 @@ def detect_duplicates(records: list[dict], key_field: str, file_type: str, start
 
 
 def detect_cross_file_utr_duplicates(
-    settlements: list[dict],
-    bank_credits: list[dict],
+    settlements: list[dict[str, Any]],
+    bank_credits: list[dict[str, Any]],
     settlement_start_line: int = 2,
     bank_start_line: int = 2,
 ) -> list[ValidationError]:
@@ -604,9 +604,9 @@ def detect_cross_file_utr_duplicates(
 # ---------------------------------------------------------------------------
 
 def check_referential_integrity(
-    transactions: list[dict],
-    refunds: list[dict],
-    settlements: list[dict],
+    transactions: list[dict[str, Any]],
+    refunds: list[dict[str, Any]],
+    settlements: list[dict[str, Any]],
     transaction_start_line: int = 2,
     refund_start_line: int = 2,
     settlement_start_line: int = 2,
@@ -653,7 +653,7 @@ def check_referential_integrity(
 
     # Check refund overage: sum of refunds for a payment > payment amount
     payment_amounts = {t["payment_id"]: t["amount"] for t in transactions}
-    refund_totals = {}
+    refund_totals: dict[str, int] = {}
     for r in refunds:
         pid = r["payment_id"]
         refund_totals[pid] = refund_totals.get(pid, 0) + r["amount"]
@@ -699,11 +699,11 @@ def compute_upload_hash(file_paths: list[str]) -> str:
 
 class IngestionResult:
     """Result of ingesting all 4 CSV files."""
-    def __init__(self):
-        self.transactions: list[dict] = []
-        self.settlements: list[dict] = []
-        self.refunds: list[dict] = []
-        self.bank_credits: list[dict] = []
+    def __init__(self) -> None:
+        self.transactions: list[dict[str, Any]] = []
+        self.settlements: list[dict[str, Any]] = []
+        self.refunds: list[dict[str, Any]] = []
+        self.bank_credits: list[dict[str, Any]] = []
         self.errors: list[ValidationError] = []
         self.upload_hash: Optional[str] = None
         self.is_cached: bool = False
