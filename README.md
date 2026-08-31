@@ -3,7 +3,7 @@
 **Track:** Razorpay Buildathon 2026 — Track 04: AI Finance Controller
 
 > **87.5% match rate on 80-settlement evaluation dataset**
-> 645+ tests, tamper-proof audit trail, 726+ settlements/sec
+> 691 tests, tamper-proof audit trail, 2,260 req/s load tested
 > AI investigates. Humans decide. Zero auto-approvals.
 
 ---
@@ -117,7 +117,7 @@ Two hard guarantees this diagram encodes: **the deterministic engine is the only
 
 Nivara is designed for that quote — working and clean before clever:
 
-1. **Works first.** Every commit runs the full test suite (650+ tests). The demo path — upload four CSVs, get a dashboard, audit trail, and review queue — works without a single external API key.
+1. **Works first.** Every commit runs the full test suite (691 tests). The demo path — upload four CSVs, get a dashboard, audit trail, and review queue — works without a single external API key.
 2. **Clean second.** Money math lives only in deterministic code; the AI has a read-only, schema-enforced interface; the audit trail is tamper-evident by construction.
 3. **Nothing hidden.** Known blind spots are documented, the evaluation dataset is synthetic and co-designed, and AI auto-approval is impossible — not best-effort.
 
@@ -133,7 +133,7 @@ Nivara is designed for that quote — working and clean before clever:
 | **False Accept Rate** | 12.5% (10 missed — known blind spots) |
 | **Throughput** | 726+ settlements/sec |
 | **AI Auto-Approval Rate** | 0% (enforced by schema) |
-| **Test Count** | 645 passing |
+| **Test Count** | 691 passing |
 | **Audit Records** | Append-only with SHA-256 hash chain |
 
 ### Edge-Case Categories (12 total)
@@ -228,7 +228,7 @@ Timeouts, malformed responses, API failures, and invalid evidence result in `UNR
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run tests (645+ should pass)
+# 2. Run tests (691 should pass)
 PYTHONPATH="$(pwd)" python3 -m pytest -q
 
 # 3. Generate demo data & run evaluation
@@ -249,7 +249,7 @@ python3 scripts/demo.py
 
 This will:
 1. Generate 80 synthetic settlements with ground truth
-2. Run the full test suite (645+ tests)
+2. Run the full test suite (691 tests)
 3. Ingest → Link → Reconcile → AI Investigate → Evaluate
 4. Print match rate, per-class F1, and throughput
 
