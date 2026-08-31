@@ -370,13 +370,13 @@ class GroqClient:
         self._api_key = api_key
         self._model = model
         self._rate_limiter = rate_limiter or GroqRateLimiter()
-        self._client = None
+        self._client: Any = None
 
     @property
     def model(self) -> str:
         return self._model
 
-    def _get_sdk_client(self):
+    def _get_sdk_client(self) -> Any:
         if self._client is None:
             if not self._api_key:
                 raise GroqError(
@@ -403,7 +403,7 @@ class GroqClient:
     def complete(
         self,
         messages: list[dict[str, Any]],
-        timeout: int = 15,
+        timeout: float = 15,
         model: Optional[str] = None,
     ) -> dict[str, Any]:
         """

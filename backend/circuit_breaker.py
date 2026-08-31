@@ -88,13 +88,13 @@ def get_breaker(provider: str) -> CircuitBreaker:
 
 
 def retry_with_backoff(
-    func: Callable,
-    *args,
+    func: Callable[..., Any],
+    *args: Any,
     provider: str = "openai",
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 30.0,
-    **kwargs,
+    **kwargs: Any,
 ) -> Any:
     """Execute func with exponential backoff and circuit breaker."""
     breaker = get_breaker(provider)
@@ -119,4 +119,5 @@ def retry_with_backoff(
                 )
                 time.sleep(delay)
 
+    assert last_error is not None
     raise last_error

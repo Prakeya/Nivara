@@ -20,27 +20,29 @@ import threading
 import uuid
 import time
 from collections import defaultdict
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from backend.audit import AuditLogger
 from backend.batch_analyzer import analyze_batch
 from backend.engine import run_engine
 from backend.ingestion import IngestionResult, ingest_csvs
-from backend.models import HumanReviewDecision, ResolutionStatus, ReviewDecision
+from backend.models import HumanReviewDecision, ReconciliationResult, ResolutionStatus, ReviewDecision
 
 logger = logging.getLogger("nivara.api")
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     """Fail fast at boot if GROQ_API_KEY is missing (WATCH-G4)."""
     try:
         _validate_llm_config()
@@ -89,10 +91,10 @@ class JobResult:
     ai_investigations: int = 0
     ai_auto_approved: int = 0
     match_rate: float = 0.0
-    csv_counts: dict = field(default_factory=dict)
-    results: list[dict] = field(default_factory=list)
-    batch_analysis: dict = field(default_factory=dict)
-    audit_records: list[dict] = field(default_factory=list)
+    csv_counts: dict[str, Any] = field(default_factory=dict)
+    results: list[dict[str, Any]] = field(default_factory=list)
+    batch_analysis: list[dict[str, Any]] = field(default_factory=list)
+    audit_records: list[dict[str, Any]] = field(default_factory=list)
 
 
 _jobs: dict[str, JobResult] = {}
@@ -105,7 +107,7 @@ _jobs_lock = threading.Lock()
 class _RateLimiter:
     """Per-IP sliding window rate limiter."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._hits: dict[str, list[float]] = defaultdict(list)
         self._upload_limit = 100  # req per 60s
         self._api_limit = 300  # req per 60s
@@ -134,13 +136,13 @@ _rate_limiter = _RateLimiter()
 # ---------------------------------------------------------------------------
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        return response
+        return response  # type: ignore[no-any-return]
 
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -167,7 +169,7 @@ def _get_audit_logger() -> AuditLogger:
     return AuditLogger(str(_AUDIT_DB_PATH))
 
 
-def _get_llm_client():
+def _get_llm_client() -> Optional[str]:
     """Return a truthy value if Groq is available.
 
     The architecture uses a Groq-first fallback chain (70B → 8B → UNRESOLVED).
@@ -212,7 +214,7 @@ def _compute_hash(file_paths: list[str]) -> str:
     return compute_upload_hash(file_paths)
 
 
-def _result_to_dict(r, gt_label: str | None = None) -> dict:
+def _result_to_dict(r: ReconciliationResult, gt_label: str | None = None) -> dict[str, Any]:
     """Convert ReconciliationResult to JSON-safe dict."""
     d = {
         "settlement_id": r.settlement_id,
@@ -248,7 +250,7 @@ def _result_to_dict(r, gt_label: str | None = None) -> dict:
 
 _NIVARA_API_KEY = os.environ.get("NIVARA_API_KEY", "")
 
-async def verify_auth(request: Request):
+async def verify_auth(request: Request) -> None:
     """Verify API key via X-API-Key header. Skip if NIVARA_API_KEY is not set."""
     if not _NIVARA_API_KEY:
         return  # No auth configured — open access
@@ -459,10 +461,10 @@ async def upload_files(
     except Exception as exc:
         logger.exception("Upload processing failed for job %s", job_id)
         with _jobs_lock:
-            job = _jobs.get(job_id)
-        if job:
-            job.status = "error"
-            job.error = "An internal error occurred during processing. Check server logs for details."
+            failing_job = _jobs.get(job_id)
+        if failing_job is not None:
+            failing_job.status = "error"
+            failing_job.error = "An internal error occurred during processing. Check server logs for details."
     finally:
         # Clean up temp directory
         import shutil
@@ -492,7 +494,7 @@ async def get_status(job_id: str) -> JSONResponse:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    content = {
+    content: dict[str, Any] = {
         "job_id": job.job_id,
         "status": job.status,
         "upload_hash": job.upload_hash,
@@ -764,7 +766,7 @@ else:
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def serve_index():
+def serve_index() -> HTMLResponse:
     index_path = (_dist_dir if _LIVE_FRONTEND else _frontend_dir) / "index.html"
     return HTMLResponse(content=index_path.read_text())
 
@@ -774,7 +776,7 @@ def serve_index():
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> JSONResponse:
     """Deep health check: DB, LLM, disk."""
     from backend.health import deep_health_check
     result = deep_health_check()
@@ -787,7 +789,7 @@ async def health_check():
 # ---------------------------------------------------------------------------
 
 @app.get("/metrics")
-async def metrics():
+async def metrics() -> JSONResponse:
     """Prometheus metrics endpoint."""
     from backend.metrics import get_metrics, get_content_type
     return JSONResponse(
@@ -797,7 +799,7 @@ async def metrics():
 
 
 @app.get("/api/metrics")
-async def api_metrics():
+async def api_metrics() -> JSONResponse:
     """JSON metrics for the Metrics Dashboard (pie chart, quota, latency, cost)."""
     from datetime import datetime as _dt, timezone as _tz
     from backend.metrics import (
@@ -858,19 +860,19 @@ v1_router = APIRouter(prefix="/v1")
 
 
 @v1_router.get("/health")
-async def v1_health():
+async def v1_health() -> dict[str, Any]:
     from backend.health import deep_health_check
     return deep_health_check()
 
 
 @v1_router.get("/prompts")
-async def v1_list_prompts():
+async def v1_list_prompts() -> dict[str, Any]:
     from backend.prompt_registry import get_registry
     return {"prompts": get_registry().list_prompts()}
 
 
 @v1_router.get("/costs/{job_id}")
-async def v1_get_costs(job_id: str):
+async def v1_get_costs(job_id: str) -> dict[str, Any]:
     """Get cost breakdown for a job."""
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -891,7 +893,7 @@ app.include_router(v1_router)
 # Pagination helper (P1-2.3)
 # ---------------------------------------------------------------------------
 
-def paginate(items: list, page: int = 1, page_size: int = 50) -> dict:
+def paginate(items: list[Any], page: int = 1, page_size: int = 50) -> dict[str, Any]:
     """Paginate a list of items."""
     total = len(items)
     start = (page - 1) * page_size
@@ -910,7 +912,7 @@ def paginate(items: list, page: int = 1, page_size: int = 50) -> dict:
 # ---------------------------------------------------------------------------
 
 @v1_router.get("/jobs")
-async def v1_list_jobs(page: int = 1, page_size: int = 50):
+async def v1_list_jobs(page: int = 1, page_size: int = 50) -> dict[str, Any]:
     """List all jobs with pagination."""
     with _jobs_lock:
         jobs = [
@@ -922,7 +924,7 @@ async def v1_list_jobs(page: int = 1, page_size: int = 50):
 
 
 @v1_router.get("/jobs/{job_id}/results")
-async def v1_get_job_results(job_id: str, page: int = 1, page_size: int = 50):
+async def v1_get_job_results(job_id: str, page: int = 1, page_size: int = 50) -> dict[str, Any]:
     """Get paginated results for a job."""
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -932,7 +934,7 @@ async def v1_get_job_results(job_id: str, page: int = 1, page_size: int = 50):
 
 
 @v1_router.get("/audit/{upload_hash}")
-async def v1_get_audit(upload_hash: str, page: int = 1, page_size: int = 50):
+async def v1_get_audit(upload_hash: str, page: int = 1, page_size: int = 50) -> dict[str, Any]:
     """Get paginated audit records."""
     audit = _get_audit_logger()
     try:
@@ -964,7 +966,7 @@ _API_PREFIXES = (
 
 
 @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
-def serve_spa_fallback(full_path: str):
+def serve_spa_fallback(full_path: str) -> HTMLResponse:
     if full_path.startswith(_API_PREFIXES):
         raise HTTPException(status_code=404, detail="Resource not found")
     index_path = (_dist_dir if _LIVE_FRONTEND else _frontend_dir) / "index.html"

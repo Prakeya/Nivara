@@ -12,3 +12,4 @@ data/audit/
 .env
 .env.local
 node_modules/
+.coverage

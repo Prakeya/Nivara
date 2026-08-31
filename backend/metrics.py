@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[import-not-found]
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -84,10 +84,10 @@ if PROMETHEUS_AVAILABLE:
         ACTIVE_JOBS.set(count)
 
     def get_metrics() -> bytes:
-        return generate_latest()
+        return generate_latest()  # type: ignore[no-any-return]
 
     def get_content_type() -> str:
-        return CONTENT_TYPE_LATEST
+        return CONTENT_TYPE_LATEST  # type: ignore[no-any-return]
 else:
     # Stub functions when prometheus_client is not installed
     def record_settlement(decision_state: str, latency_seconds: float) -> None: pass
@@ -150,7 +150,7 @@ def record_groq_usage(tokens: int, model: str) -> None:
             pass
 
 
-def llm_metrics_snapshot() -> dict:
+def llm_metrics_snapshot() -> dict[str, Any]:
     """Return aggregate LLM call metrics for the dashboard."""
     with _llm_lock:
         return {
@@ -161,7 +161,7 @@ def llm_metrics_snapshot() -> dict:
         }
 
 
-def groq_daily_usage_snapshot() -> dict:
+def groq_daily_usage_snapshot() -> dict[str, Any]:
     """Return Groq free-tier quota usage for the dashboard progress bar."""
     from backend.groq_client import DEFAULT_TOKENS_PER_DAY
 

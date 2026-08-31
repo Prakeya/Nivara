@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -187,7 +187,7 @@ class Settlement(BaseModel):
 
     @field_validator("settled_at")
     @classmethod
-    def validate_settled_at(cls, v: datetime, info) -> datetime:
+    def validate_settled_at(cls, v: datetime, info: Any) -> datetime:
         if "created_at" in info.data and v < info.data["created_at"]:
             raise ValueError("settled_at must be >= created_at")
         return v
@@ -245,7 +245,7 @@ class CrossSettlementContext(BaseModel):
     batch_refund_rate: float = Field(ge=0.0, le=1.0)
     batch_math_discrepancy_rate: float = Field(ge=0.0, le=1.0)
     merchant_fee_exceptions_in_batch: int = Field(ge=0)
-    method_mix: dict = Field(default_factory=dict)
+    method_mix: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidencePacket(BaseModel):
@@ -401,7 +401,7 @@ class ReasoningStep(BaseModel):
     action_type: AgentActionType
     thought: str
     tool_name: Optional[str] = None
-    tool_args: Optional[dict] = None
+    tool_args: Optional[dict[str, Any]] = None
     tool_result: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now())
 
@@ -424,7 +424,7 @@ class ToolCall(BaseModel):
     model_config = ConfigDict(strict=True, frozen=False, validate_assignment=True)
 
     tool_name: str
-    tool_args: dict = Field(default_factory=dict)
+    tool_args: dict[str, Any] = Field(default_factory=dict)
     call_id: str = Field(default_factory=lambda: str(uuid4()))
 
 
@@ -434,7 +434,7 @@ class ToolResult(BaseModel):
 
     call_id: str
     tool_name: str
-    result: dict = Field(default_factory=dict)
+    result: dict[str, Any] = Field(default_factory=dict)
     success: bool = True
     error: Optional[str] = None
 
@@ -473,7 +473,7 @@ class HumanReviewDecision(BaseModel):
     decision: str  # "APPROVE" | "REJECT" | "MODIFY"
     reason: str
     reviewer_id: str
-    modifications: Optional[dict] = None
+    modifications: Optional[dict[str, Any]] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now())
 
 
@@ -506,4 +506,4 @@ class AgentToolDefinition(BaseModel):
 
     name: str
     description: str
-    parameters: dict = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)

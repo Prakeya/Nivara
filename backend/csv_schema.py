@@ -8,7 +8,7 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0"
 
-CSV_SCHEMAS = {
+CSV_SCHEMAS: dict[str, dict[str, Any]] = {
     "transactions": {
         "version": "1.0",
         "required_columns": [

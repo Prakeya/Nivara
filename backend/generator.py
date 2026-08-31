@@ -159,13 +159,13 @@ def _make_bank_credit(
     }
 
 
-def _settlement_amount(linked_payments: list[dict], linked_refunds: list[dict]) -> int:
+def _settlement_amount(linked_payments: list[dict[str, Any]], linked_refunds: list[dict[str, Any]]) -> int:
     """Compute correct settlement amount = payments - refunds - fees - tax."""
     total_payments = sum(p["amount"] for p in linked_payments)
     total_refunds = sum(r["amount"] for r in linked_refunds)
     total_fees = sum(p["fee"] for p in linked_payments)
     total_tax = sum(p["tax"] for p in linked_payments)
-    return total_payments - total_refunds - total_fees - total_tax
+    return total_payments - total_refunds - total_fees - total_tax  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ def _gen_clean_match(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Generate a clean_match settlement. difference == 0, all checks pass."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(1, 4)
@@ -243,7 +243,7 @@ def _gen_missing_reference(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Settlement references payment IDs that don't exist in transactions."""
     sid = f"SETL_{idx:04d}"
     n_ghosts = rng.randint(2, 4)
@@ -273,7 +273,7 @@ def _gen_adjustment_entry(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Settlement amount includes an adjustment not reflected in payments.
 
     The engine computes expected = payments - refunds - fees - tax.
@@ -328,7 +328,7 @@ def _gen_refund_after_settlement(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Refund processed after settlement — not in linked_refund_ids.
 
     The settlement amount was computed correctly at settlement time (without
@@ -388,7 +388,7 @@ def _gen_timing_race(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Refund created between settlement creation and bank credit.
 
     The refund is processed during the settlement window but is NOT included
@@ -447,7 +447,7 @@ def _gen_bank_mismatch(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Settlement exists but no matching bank credit found."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(1, 3)
@@ -493,7 +493,7 @@ def _gen_fee_mismatch(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Transaction fee doesn't match the deterministic formula."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(2, 4)
@@ -559,7 +559,7 @@ def _gen_tax_inconsistency(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Transaction tax doesn't match floor(fee * 0.18)."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(2, 4)
@@ -623,7 +623,7 @@ def _gen_refund_timing(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Refund created very close to settlement boundary. Produces MATH_DISCREPANCY."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(2, 3)
@@ -689,7 +689,7 @@ def _gen_partial_settlement(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Bank credited only a partial amount of the settlement.
 
     The settlement amount is correct, but the bank credit is less.
@@ -744,7 +744,7 @@ def _gen_near_miss_amount(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Near-miss: settlement amount off by 1 paise. Triggers MATH_DISCREPANCY."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
@@ -775,7 +775,7 @@ def _gen_off_by_one_date(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Off-by-one date: settled at 23:59:59, bank credited next day 00:00:01. Still clean."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
@@ -805,7 +805,7 @@ def _gen_duplicate_utr(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Duplicate UTR: pairs of settlements share the same UTR. Triggers duplicate_detection."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
@@ -836,7 +836,7 @@ def _gen_missing_optional_field(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Missing optional field: empty linked_refund_ids, all else valid. Should be clean."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
@@ -864,7 +864,7 @@ def _gen_fee_off_by_one(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Fee off by 1 paise: payment fee = expected_fee + 1. Triggers fee_validation."""
     sid = f"SETL_{idx:04d}"
     pid = f"PAY_{idx:04d}_00"
@@ -899,7 +899,7 @@ def _gen_unexplained(
     idx: int,
     rng: random.Random,
     base_date: datetime,
-) -> tuple[dict, list[dict], list[dict], list[dict], dict]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """All checks pass but difference != 0. No obvious cause."""
     sid = f"SETL_{idx:04d}"
     n_payments = rng.randint(2, 4)
@@ -991,11 +991,11 @@ def generate_batch(
     rng = _get_rng(seed)
     base_date = datetime(2026, 8, 15, 8, 0, 0)
 
-    all_settlements: list[dict] = []
-    all_transactions: list[dict] = []
-    all_refunds: list[dict] = []
-    all_bank_credits: list[dict] = []
-    all_ground_truth: list[dict] = []
+    all_settlements: list[dict[str, Any]] = []
+    all_transactions: list[dict[str, Any]] = []
+    all_refunds: list[dict[str, Any]] = []
+    all_bank_credits: list[dict[str, Any]] = []
+    all_ground_truth: list[dict[str, Any]] = []
 
     idx = 1
 
@@ -1148,7 +1148,7 @@ BANK_CREDIT_FIELDS = [
 ]
 
 
-def _write_csv(path: str, fieldnames: list[str], rows: list[dict]) -> None:
+def _write_csv(path: str, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()

@@ -105,7 +105,7 @@ class AuditRecord:
 
     def payload(self) -> dict[str, Any]:
         """Deserialize the JSON payload."""
-        return json.loads(self.payload_json)
+        return json.loads(self.payload_json)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -132,10 +132,15 @@ class AuditLogger:
     def _init_db(self) -> None:
         """Initialize database schema with WAL mode and safe journal."""
         self._conn = sqlite3.connect(self.db_path, timeout=30)
+        assert self._conn is not None
         self._conn.execute("PRAGMA journal_mode=WAL")
+        assert self._conn is not None
         self._conn.execute(SCHEMA_SQL)
+        assert self._conn is not None
         self._conn.execute(INDEX_SQL)
+        assert self._conn is not None
         self._conn.execute(INDEX_SETTLEMENT_SQL)
+        assert self._conn is not None
         self._conn.commit()
 
     def close(self) -> None:
@@ -146,6 +151,7 @@ class AuditLogger:
 
     def _get_last_hash(self, upload_hash: str) -> Optional[str]:
         """Get the hash of the most recent record for a batch (for chaining)."""
+        assert self._conn is not None
         cursor = self._conn.execute(
             "SELECT record_hash FROM audit_log WHERE upload_hash = ? ORDER BY timestamp DESC LIMIT 1",
             (upload_hash,),
@@ -199,6 +205,7 @@ class AuditLogger:
 
         # Hash chain: BEGIN IMMEDIATE ensures exclusive write lock —
         # prevents concurrent reads/inserts from corrupting the chain
+        assert self._conn is not None
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             prev_hash = self._get_last_hash(upload_hash)
@@ -215,6 +222,7 @@ class AuditLogger:
                 prev_hash=prev_hash,
             )
 
+            assert self._conn is not None
             self._conn.execute(
                 "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -222,9 +230,11 @@ class AuditLogger:
                  record.timestamp, record.decision_state, record.payload_json,
                  record.record_hash, record.prev_hash),
             )
+            assert self._conn is not None
             self._conn.commit()
         except Exception:
-            self._conn.rollback()
+            if self._conn is not None:
+                self._conn.rollback()
             raise
 
         return record
@@ -258,6 +268,7 @@ class AuditLogger:
         Returns:
             List of AuditRecords in insertion order.
         """
+        assert self._conn is not None
         cursor = self._conn.execute(
             "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash "
             "FROM audit_log WHERE upload_hash = ? ORDER BY timestamp",
@@ -287,6 +298,7 @@ class AuditLogger:
         Returns:
             List of AuditRecords in insertion order.
         """
+        assert self._conn is not None
         cursor = self._conn.execute(
             "SELECT id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash "
             "FROM audit_log WHERE settlement_id = ? ORDER BY timestamp",
@@ -316,6 +328,7 @@ class AuditLogger:
         Returns:
             Dict mapping decision state to count.
         """
+        assert self._conn is not None
         cursor = self._conn.execute(
             "SELECT decision_state, COUNT(*) FROM audit_log WHERE upload_hash = ? GROUP BY decision_state",
             (upload_hash,),
@@ -331,11 +344,12 @@ class AuditLogger:
         Returns:
             Total record count.
         """
+        assert self._conn is not None
         cursor = self._conn.execute(
             "SELECT COUNT(*) FROM audit_log WHERE upload_hash = ?",
             (upload_hash,),
         )
-        return cursor.fetchone()[0]
+        return cursor.fetchone()[0]  # type: ignore[no-any-return]
 
     def verify_chain(self, upload_hash: str) -> dict[str, Any]:
         """Verify hash chain integrity for a batch.
@@ -397,6 +411,7 @@ class AuditLogger:
         payload_json = json.dumps(payload, default=str)
 
         # Hash chain for human_review records with BEGIN IMMEDIATE
+        assert self._conn is not None
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             prev_hash = self._get_last_hash("human_review")
@@ -413,6 +428,7 @@ class AuditLogger:
                 prev_hash=prev_hash,
             )
 
+            assert self._conn is not None
             self._conn.execute(
                 "INSERT INTO audit_log (id, upload_hash, settlement_id, timestamp, decision_state, payload_json, record_hash, prev_hash) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -420,9 +436,11 @@ class AuditLogger:
                  record.timestamp, record.decision_state, record.payload_json,
                  record.record_hash, record.prev_hash),
             )
+            assert self._conn is not None
             self._conn.commit()
         except Exception:
-            self._conn.rollback()
+            if self._conn is not None:
+                self._conn.rollback()
             raise
 
         return record
@@ -435,7 +453,7 @@ class AuditLogger:
 class InMemoryAuditLogger:
     """In-memory audit logger for testing. No SQLite dependency."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.records: list[AuditRecord] = []
 
     def close(self) -> None:

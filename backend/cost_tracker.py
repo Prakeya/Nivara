@@ -8,6 +8,7 @@ Pricing is configurable via environment or defaults to OpenAI gpt-4o-mini rates.
 from __future__ import annotations
 
 import os
+from typing import Any
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -42,7 +43,7 @@ class SettlementCost:
         self.total_cost_inr += usage.cost_inr
         self.total_latency_ms += usage.latency_ms
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "settlement_id": self.settlement_id,
             "total_input_tokens": self.total_input_tokens,
@@ -106,7 +107,7 @@ class CostTracker:
     def get_settlement_cost(self, settlement_id: str) -> Optional[SettlementCost]:
         return self._settlements.get(settlement_id)
 
-    def summary(self) -> dict:
+    def summary(self) -> dict[str, Any]:
         return {
             "total_settlements": len(self._settlements),
             "total_cost_inr": round(self._total_cost_inr, 4),
@@ -116,5 +117,5 @@ class CostTracker:
             ),
         }
 
-    def all_settlements(self) -> list[dict]:
+    def all_settlements(self) -> list[dict[str, Any]]:
         return [sc.to_dict() for sc in self._settlements.values()]

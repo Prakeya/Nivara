@@ -131,7 +131,7 @@ class RazorpayMCPClient:
 
         return settlements
 
-    def to_csv_rows(self, settlements: list[MCPSettlement]) -> list[dict]:
+    def to_csv_rows(self, settlements: list[MCPSettlement]) -> list[dict[str, Any]]:
         """Convert MCP settlements to CSV-compatible dicts for ingestion."""
         return [
             {

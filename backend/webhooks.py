@@ -51,7 +51,7 @@ def _send_webhook(event: str, data: dict[str, Any], url: str) -> bool:
 
     try:
         req = Request(url, data=payload, headers=headers, method="POST")
-        with urlopen(req, timeout=10) as resp:
+        with urlopen(req, timeout=10) as resp:  # nosec B310
             return resp.status < 400
     except Exception as e:
         logger.warning("Webhook delivery failed to %s: %s", url, e)

@@ -27,7 +27,7 @@ Outcomes:
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 
 from backend.models import (
     DecisionState,
@@ -117,7 +117,7 @@ class _EvidenceBuilder:
         )
 
 
-def _parse_date(val) -> date:
+def _parse_date(val: Any) -> date:
     """Parse a date from string, date, or datetime."""
     if isinstance(val, date) and not isinstance(val, datetime):
         return val
@@ -177,12 +177,14 @@ def _make_exception(
 # Duplicate detection helpers
 # ---------------------------------------------------------------------------
 
-def detect_duplicates(items: list[dict], key: str, error_type: str) -> list[dict]:
+def detect_duplicates(items: list[dict[str, Any]], key: str, error_type: str) -> list[dict[str, Any]]:
     """Detect duplicate values for a key within a list of dicts."""
     seen: dict[str, int] = {}
-    errors: list[dict] = []
+    errors: list[dict[str, Any]] = []
     for i, item in enumerate(items):
         val = item.get(key)
+        if val is None:
+            continue
         if val in seen:
             errors.append({
                 "error_type": error_type,
@@ -195,11 +197,11 @@ def detect_duplicates(items: list[dict], key: str, error_type: str) -> list[dict
 
 
 def detect_cross_file_utr_duplicates(
-    settlements: list[dict],
-    bank_credits: list[dict],
-) -> list[dict]:
+    settlements: list[dict[str, Any]],
+    bank_credits: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Detect duplicate UTRs within settlements and within bank_credits."""
-    errors: list[dict] = []
+    errors: list[dict[str, Any]] = []
 
     settlement_utrs: dict[str, int] = {}
     for i, s in enumerate(settlements):
@@ -235,12 +237,12 @@ def detect_cross_file_utr_duplicates(
 # ---------------------------------------------------------------------------
 
 def reconcile_settlement(
-    settlement: dict,
-    linked_payments: list[dict],
-    linked_refunds: list[dict],
-    bank_credit: Optional[dict],
-    linkage_errors: list[dict],
-    duplicate_errors: list[dict],
+    settlement: dict[str, Any],
+    linked_payments: list[dict[str, Any]],
+    linked_refunds: list[dict[str, Any]],
+    bank_credit: Optional[dict[str, Any]],
+    linkage_errors: list[dict[str, Any]],
+    duplicate_errors: list[dict[str, Any]],
     linked_bank_utr: Optional[str] = None,
 ) -> ReconciliationResult:
     """
@@ -492,11 +494,11 @@ def reconcile_settlement(
 # ---------------------------------------------------------------------------
 
 def run_engine(
-    transactions: list[dict],
-    settlements: list[dict],
-    refunds: list[dict],
-    bank_credits: list[dict],
-    llm_client=None,
+    transactions: list[dict[str, Any]],
+    settlements: list[dict[str, Any]],
+    refunds: list[dict[str, Any]],
+    bank_credits: list[dict[str, Any]],
+    llm_client: Optional[str] = None,
     max_workers: int = 4,
     settlement_cycle_days: int = 2,
 ) -> list[ReconciliationResult]:
@@ -537,7 +539,7 @@ def run_engine(
         if utr:
             bank_credit_utrs[bc.get("settlement_id", "")] = utr
 
-    def _reconcile_one(settlement: dict) -> ReconciliationResult:
+    def _reconcile_one(settlement: dict[str, Any]) -> ReconciliationResult:
         try:
             lr = linkage_by_sid.get(settlement["settlement_id"])
             if lr is None:

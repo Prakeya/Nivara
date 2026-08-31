@@ -29,7 +29,7 @@ class PromptRegistry:
             raise FileNotFoundError(f"Prompt '{name}' not found at {path}")
         with open(path) as f:
             data = json.load(f)
-        return data
+        return data  # type: ignore[no-any-return]
 
     def _load_md_prompt(self, version: str, name: str = "system") -> dict[str, Any]:
         path = self._dir / version / f"{name}.md"
@@ -72,12 +72,12 @@ class PromptRegistry:
             version = data.get("latest", "1.0")
         if version not in versions:
             raise ValueError(f"Prompt '{name}' version '{version}' not found")
-        return versions[version]
+        return versions[version]  # type: ignore[no-any-return]
 
     def get_version(self, name: str) -> str:
         """Get the latest version string for a prompt."""
         data = self._load_prompt(name)
-        return data.get("latest", "1.0")
+        return data.get("latest", "1.0")  # type: ignore[no-any-return]
 
     def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts with metadata."""
