@@ -73,6 +73,40 @@ curl -s -X POST http://localhost:8000/upload \
 Returns `422` if the batch would exceed the Groq free-tier daily token budget,
 and `429` if the client is rate-limited.
 
+### `POST /api/fetch-razorpay`
+
+Fetch settlements live from Razorpay API. Requires `RAZORPAY_API_KEY` and
+`RAZORPAY_API_SECRET` environment variables.
+
+```bash
+curl -s -X POST http://localhost:8000/api/fetch-razorpay \
+  -H "Content-Type: application/json" \
+  -d '{"from_date": "2026-08-01", "to_date": "2026-08-31", "count": 50}'
+```
+
+```json
+{
+  "status": "fetched",
+  "count": 50,
+  "settlements": [
+    {
+      "settlement_id": "setl_123",
+      "amount": 100000,
+      "status": "settled",
+      "utr": "UTR123456",
+      "created_at": "2026-08-30T10:00:00Z",
+      "settled_at": "2026-08-31T10:00:00Z",
+      "linked_payment_ids": "['pay_1', 'pay_2']",
+      "linked_refund_ids": "[]"
+    }
+  ],
+  "message": "Fetched 50 settlements from Razorpay. POST these to /upload to run reconciliation."
+}
+```
+
+Returns `503` if Razorpay credentials are not configured.
+Returns `502` if the Razorpay API call fails.
+
 ### `GET /status/{job_id}`
 
 Full dashboard payload: hero metrics, results table, review queue, batch

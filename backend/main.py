@@ -890,6 +890,78 @@ app.include_router(v1_router)
 
 
 # ---------------------------------------------------------------------------
+# Live Razorpay Integration (optional — requires RAZORPAY_API_KEY/SECRET)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/fetch-razorpay")
+async def fetch_razorpay(
+    request: Request,
+    body: dict[str, Any],
+    _auth: None = Depends(verify_auth),
+) -> JSONResponse:
+    """Fetch settlements live from Razorpay and run reconciliation.
+
+    Requires RAZORPAY_API_KEY and RAZORPAY_API_SECRET environment variables.
+    Falls back to CSV upload when credentials are not configured.
+
+    Body:
+        merchant_id: str (optional, reserved for future use)
+        from_date: str (YYYY-MM-DD, optional)
+        to_date: str (YYYY-MM-DD, optional)
+        count: int (max settlements to fetch, default 100)
+    """
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_api(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
+    from backend.mcp_client import RazorpayMCPClient
+
+    razorpay_client = RazorpayMCPClient.from_env()
+    if razorpay_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay API not configured. Set RAZORPAY_API_KEY and RAZORPAY_API_SECRET.",
+        )
+
+    from datetime import date as _date
+
+    from_date = None
+    to_date = None
+    count = body.get("count", 100)
+
+    if body.get("from_date"):
+        from_date = _date.fromisoformat(body["from_date"])
+    if body.get("to_date"):
+        to_date = _date.fromisoformat(body["to_date"])
+
+    try:
+        settlements = razorpay_client.fetch_settlements(
+            from_date=from_date,
+            to_date=to_date,
+            count=count,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    if not settlements:
+        return JSONResponse(content={
+            "status": "empty",
+            "message": "No settlements found for the given date range.",
+            "settlements": [],
+        })
+
+    csv_rows = razorpay_client.to_csv_rows(settlements)
+
+    return JSONResponse(content={
+        "status": "fetched",
+        "count": len(csv_rows),
+        "settlements": csv_rows,
+        "message": f"Fetched {len(csv_rows)} settlements from Razorpay. "
+                   "POST these to /upload to run reconciliation.",
+    })
+
+
+# ---------------------------------------------------------------------------
 # Pagination helper (P1-2.3)
 # ---------------------------------------------------------------------------
 
