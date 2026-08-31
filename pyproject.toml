@@ -1,0 +1,24 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "backend/rbac.py",
+    "backend/secret_manager.py",
+    "backend/pii_redaction.py",
+    "backend/webhooks.py",
+    "backend/tasks.py",
+    "backend/logging_config.py",
+    "backend/semantic_validation.py",
+]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
