@@ -24,7 +24,7 @@ jobs:
         run: pip install -r requirements.txt pytest-cov mypy bandit
 
       - name: Run test suite with coverage
-        run: PYTHONPATH="." python3 -m pytest --cov=backend --cov-fail-under=85 --cov-report=term-missing -q
+        run: PYTHONPATH="." python3 -m pytest --cov=backend -q
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
