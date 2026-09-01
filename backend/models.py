@@ -323,7 +323,7 @@ class ReconciliationResult(BaseModel):
     expected_amount_paise: int
     actual_amount_paise: int = Field(gt=0)
     ai_response: Optional[AIResponse] = None
-    agent_response: Optional[AgentResponse] = None
+    agent_response: Optional["AgentResponse"] = None
     deterministic_checks_passed: list[str]
     deterministic_checks_failed: list[str]
     escalate_to_human: bool
