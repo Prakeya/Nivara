@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, date
 from enum import Enum
 from typing import Any, Literal, Optional
