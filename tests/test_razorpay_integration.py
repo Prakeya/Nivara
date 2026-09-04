@@ -99,6 +99,78 @@ class TestRazorpayEndpoint:
             assert "API timeout" in r.json()["detail"]
 
 
+class TestReconcileRazorpayEndpoint:
+    def test_reconcile_razorpay_not_configured(self):
+        """Returns 503 when Razorpay credentials are not set."""
+        with patch.object(RazorpayMCPClient, "from_env", return_value=None):
+            r = client.post("/api/reconcile-razorpay", json={})
+            assert r.status_code == 503
+            assert "not configured" in r.json()["detail"]
+
+    def test_reconcile_razorpay_empty(self):
+        """Returns empty status when no settlements found."""
+        fake_client = MagicMock(spec=RazorpayMCPClient)
+        fake_client.fetch_settlements.return_value = []
+        fake_client.is_available.return_value = True
+
+        with patch.object(RazorpayMCPClient, "from_env", return_value=fake_client):
+            r = client.post("/api/reconcile-razorpay", json={})
+            assert r.status_code == 200
+            body = r.json()
+            assert body["status"] == "empty"
+            assert body["job_id"] is None
+
+    def test_reconcile_razorpay_success(self):
+        """Returns reconciliation results from live Razorpay data."""
+        fake_settlements = [
+            MCPSettlement(
+                settlement_id="setl_001",
+                amount=100000,
+                status="settled",
+                utr="UTR123456",
+                created_at="2026-08-30",
+                settled_at="2026-08-31",
+                linked_payment_ids=["pay_1"],
+                linked_refund_ids=[],
+            ),
+        ]
+
+        fake_client = MagicMock(spec=RazorpayMCPClient)
+        fake_client.fetch_settlements.return_value = fake_settlements
+        fake_client.to_csv_rows.return_value = [
+            {
+                "settlement_id": "setl_001",
+                "amount": 100000,
+                "status": "settled",
+                "utr": "UTR123456",
+                "created_at": "2026-08-30",
+                "settled_at": "2026-08-31",
+                "linked_payment_ids": "['pay_1']",
+                "linked_refund_ids": "[]",
+            },
+        ]
+        fake_client.is_available.return_value = True
+
+        with patch.object(RazorpayMCPClient, "from_env", return_value=fake_client):
+            r = client.post("/api/reconcile-razorpay", json={"count": 10})
+            assert r.status_code == 200
+            body = r.json()
+            assert body["status"] == "completed"
+            assert body["job_id"] is not None
+            assert body["total_settlements"] >= 1
+
+    def test_reconcile_razorpay_api_error(self):
+        """Returns 502 when Razorpay API call fails."""
+        fake_client = MagicMock(spec=RazorpayMCPClient)
+        fake_client.fetch_settlements.side_effect = RuntimeError("Connection refused")
+        fake_client.is_available.return_value = True
+
+        with patch.object(RazorpayMCPClient, "from_env", return_value=fake_client):
+            r = client.post("/api/reconcile-razorpay", json={})
+            assert r.status_code == 502
+            assert "Connection refused" in r.json()["detail"]
+
+
 class TestMCPClientUnit:
     def test_from_env_missing_credentials(self):
         """Returns None when env vars are missing."""

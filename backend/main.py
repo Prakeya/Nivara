@@ -961,6 +961,107 @@ async def fetch_razorpay(
     })
 
 
+@app.post("/api/reconcile-razorpay")
+async def reconcile_razorpay(
+    request: Request,
+    body: dict[str, Any],
+    _auth: None = Depends(verify_auth),
+) -> JSONResponse:
+    """Fetch settlements from Razorpay AND run reconciliation in one call.
+
+    Requires RAZORPAY_API_KEY and RAZORPAY_API_SECRET environment variables.
+
+    Body:
+        from_date: str (YYYY-MM-DD, optional, default 7 days ago)
+        to_date: str (YYYY-MM-DD, optional, default today)
+        count: int (max settlements to fetch, default 100)
+    """
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.check_api(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
+    from datetime import date as _date, timedelta
+
+    from backend.mcp_client import RazorpayMCPClient
+
+    razorpay_client = RazorpayMCPClient.from_env()
+    if razorpay_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay API not configured. Set RAZORPAY_API_KEY and RAZORPAY_API_SECRET.",
+        )
+
+    today = _date.today()
+    from_date = _date.fromisoformat(body["from_date"]) if body.get("from_date") else today - timedelta(days=7)
+    to_date = _date.fromisoformat(body["to_date"]) if body.get("to_date") else today
+    count = body.get("count", 100)
+
+    try:
+        settlements = razorpay_client.fetch_settlements(
+            from_date=from_date,
+            to_date=to_date,
+            count=count,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    if not settlements:
+        return JSONResponse(content={
+            "status": "empty",
+            "message": "No settlements found for the given date range.",
+            "job_id": None,
+        })
+
+    settlement_rows = razorpay_client.to_csv_rows(settlements)
+
+    from backend.engine import run_engine
+    from backend.models import DecisionState
+
+    job_id = uuid.uuid4().hex[:12]
+    try:
+        results = run_engine(
+            transactions=[],
+            settlements=settlement_rows,
+            refunds=[],
+            bank_credits=[],
+            llm_client="groq",
+        )
+    except Exception as exc:
+        logger.exception("Engine failed for Razorpay reconciliation")
+        raise HTTPException(status_code=500, detail=f"Reconciliation failed: {exc}")
+
+    clean = sum(1 for r in results if r.decision == DecisionState.CLEAN_MATCH)
+    exceptions = sum(1 for r in results if r.decision in (
+        DecisionState.DETERMINISTIC_EXCEPTION, DecisionState.MATH_DISCREPANCY,
+    ))
+    unresolved = sum(1 for r in results if r.decision == DecisionState.UNRESOLVED)
+
+    job = JobResult(
+        job_id=job_id,
+        status="completed",
+        total_settlements=len(results),
+        clean_matches=clean,
+        exceptions=exceptions,
+        unresolved=unresolved,
+        match_rate=round(clean / len(results) * 100, 1) if results else 0,
+        results=[_result_to_dict(r) for r in results],
+        batch_analysis=[],
+        audit_records=[],
+    )
+    with _jobs_lock:
+        _jobs[job_id] = job
+
+    return JSONResponse(content={
+        "status": "completed",
+        "job_id": job_id,
+        "total_settlements": len(results),
+        "clean_matches": clean,
+        "exceptions": exceptions,
+        "unresolved": unresolved,
+        "match_rate": job.match_rate,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Pagination helper (P1-2.3)
 # ---------------------------------------------------------------------------

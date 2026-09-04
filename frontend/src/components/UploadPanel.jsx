@@ -3,6 +3,8 @@ function UploadPanel({ onUploadComplete, loading }) {
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [dragOver, setDragOver] = React.useState(false);
+  const [fetchingRazorpay, setFetchingRazorpay] = React.useState(false);
+  const [razorpayError, setRazorpayError] = React.useState("");
   const inputRefs = React.useRef({});
 
   const fileLabels = {
@@ -81,6 +83,32 @@ function UploadPanel({ onUploadComplete, loading }) {
     Object.values(inputRefs.current).forEach(el => { if (el) el.value = ""; });
   };
 
+  const fetchFromRazorpay = async () => {
+    setRazorpayError("");
+    setFetchingRazorpay(true);
+    try {
+      const resp = await fetch("/api/reconcile-razorpay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 100 }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.status === "empty") {
+        setRazorpayError("No settlements found for the last 7 days.");
+        setFetchingRazorpay(false);
+        return;
+      }
+      onUploadComplete(data.job_id);
+    } catch (err) {
+      setRazorpayError(`Razorpay fetch failed: ${err.message}`);
+    }
+    setFetchingRazorpay(false);
+  };
+
   return (
     <div className="card">
       <div className="card-header">
@@ -139,6 +167,27 @@ function UploadPanel({ onUploadComplete, loading }) {
           {(uploading || loading) && <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
           {uploading ? "Processing..." : "Upload & Reconcile"}
         </button>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0 0', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Or fetch live from Razorpay</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Requires RAZORPAY_API_KEY + RAZORPAY_API_SECRET
+            </div>
+          </div>
+          <button
+            className="btn"
+            disabled={fetchingRazorpay || uploading || loading}
+            onClick={fetchFromRazorpay}
+            style={{ background: '#6366f1', color: '#fff', whiteSpace: 'nowrap' }}
+          >
+            {fetchingRazorpay && <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
+            {fetchingRazorpay ? "Fetching..." : "Fetch from Razorpay (7d)"}
+          </button>
+        </div>
+        {razorpayError && <div className="upload-error" style={{ marginTop: '8px' }}>{razorpayError}</div>}
       </div>
     </div>
   );
