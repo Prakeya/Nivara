@@ -42,7 +42,7 @@ jobs:
         run: PYTHONPATH="." python3 -m mypy backend --strict
 
       - name: Bandit security scan
-        run: python3 -m bandit -q -r backend/ -f txt
+        run: python3 -m bandit -q -r backend/ -f txt -ll
 
   frontend:
     name: Frontend build
