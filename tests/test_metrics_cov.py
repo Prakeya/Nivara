@@ -101,7 +101,7 @@ class TestPrometheusBranch:
 
 class TestStubBranch:
     def test_stubs(self, monkeypatch):
-        monkeypatch.delitem(sys.modules, "prometheus_client", raising=False)
+        monkeypatch.setitem(sys.modules, "prometheus_client", None)
         importlib.reload(metrics_mod)
         assert metrics_mod.PROMETHEUS_AVAILABLE is False
         assert metrics_mod.get_metrics() == b"# prometheus_client not installed\n"

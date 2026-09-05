@@ -16,52 +16,120 @@ import time
 from typing import Any, Optional
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[import-not-found]
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
 
 if PROMETHEUS_AVAILABLE:
-    # Settlement processing metrics
-    SETTLEMENTS_PROCESSED = Counter(
-        "nivara_settlements_processed_total",
-        "Total settlements processed",
-        ["decision_state"],
-    )
-    SETTLEMENT_LATENCY = Histogram(
-        "nivara_settlement_latency_seconds",
-        "Time to process a single settlement",
-        buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
-    )
-    BATCHES_PROCESSED = Counter(
-        "nivara_batches_processed_total",
-        "Total batches (uploads) processed",
-    )
-    UPLOAD_ERRORS = Counter(
-        "nivara_upload_errors_total",
-        "Total upload errors",
-        ["error_type"],
-    )
-    ACTIVE_JOBS = Gauge(
-        "nivara_active_jobs",
-        "Number of currently processing jobs",
-    )
-    LLM_CALLS = Counter(
-        "nivara_llm_calls_total",
-        "Total LLM API calls",
-        ["provider", "status"],
-    )
-    LLM_LATENCY = Histogram(
-        "nivara_llm_latency_seconds",
-        "LLM API call latency",
-        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
-    )
-    HUMAN_REVIEWS = Counter(
-        "nivara_human_reviews_total",
-        "Total human review decisions",
-        ["decision"],
-    )
+    PROMETHEUS_REGISTRY: Any | None = None
+    try:
+        from prometheus_client import CollectorRegistry
+
+        PROMETHEUS_REGISTRY = CollectorRegistry()
+    except Exception:
+        pass
+
+    if PROMETHEUS_REGISTRY is None:
+        # Settlement processing metrics
+        SETTLEMENTS_PROCESSED = Counter(
+            "nivara_settlements_processed_total",
+            "Total settlements processed",
+            ["decision_state"],
+        )
+        SETTLEMENT_LATENCY = Histogram(
+            "nivara_settlement_latency_seconds",
+            "Time to process a single settlement",
+            buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+        )
+        BATCHES_PROCESSED = Counter(
+            "nivara_batches_processed_total",
+            "Total batches (uploads) processed",
+        )
+        UPLOAD_ERRORS = Counter(
+            "nivara_upload_errors_total",
+            "Total upload errors",
+            ["error_type"],
+        )
+        ACTIVE_JOBS = Gauge(
+            "nivara_active_jobs",
+            "Number of currently processing jobs",
+        )
+        LLM_CALLS = Counter(
+            "nivara_llm_calls_total",
+            "Total LLM API calls",
+            ["provider", "status"],
+        )
+        LLM_LATENCY = Histogram(
+            "nivara_llm_latency_seconds",
+            "LLM API call latency",
+            buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+        )
+        HUMAN_REVIEWS = Counter(
+            "nivara_human_reviews_total",
+            "Total human review decisions",
+            ["decision"],
+        )
+        GROQ_DAILY_TOKENS_USED = Gauge(
+            "nivara_groq_daily_tokens_used",
+            "Groq daily tokens consumed",
+            ["model"],
+        )
+    else:
+        # Settlement processing metrics
+        SETTLEMENTS_PROCESSED = Counter(
+            "nivara_settlements_processed_total",
+            "Total settlements processed",
+            ["decision_state"],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        SETTLEMENT_LATENCY = Histogram(
+            "nivara_settlement_latency_seconds",
+            "Time to process a single settlement",
+            buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        BATCHES_PROCESSED = Counter(
+            "nivara_batches_processed_total",
+            "Total batches (uploads) processed",
+            registry=PROMETHEUS_REGISTRY,
+        )
+        UPLOAD_ERRORS = Counter(
+            "nivara_upload_errors_total",
+            "Total upload errors",
+            ["error_type"],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        ACTIVE_JOBS = Gauge(
+            "nivara_active_jobs",
+            "Number of currently processing jobs",
+            registry=PROMETHEUS_REGISTRY,
+        )
+        LLM_CALLS = Counter(
+            "nivara_llm_calls_total",
+            "Total LLM API calls",
+            ["provider", "status"],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        LLM_LATENCY = Histogram(
+            "nivara_llm_latency_seconds",
+            "LLM API call latency",
+            buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        HUMAN_REVIEWS = Counter(
+            "nivara_human_reviews_total",
+            "Total human review decisions",
+            ["decision"],
+            registry=PROMETHEUS_REGISTRY,
+        )
+        GROQ_DAILY_TOKENS_USED = Gauge(
+            "nivara_groq_daily_tokens_used",
+            "Groq daily tokens consumed",
+            ["model"],
+            registry=PROMETHEUS_REGISTRY,
+        )
 
     def record_settlement(decision_state: str, latency_seconds: float) -> None:
         SETTLEMENTS_PROCESSED.labels(decision_state=decision_state).inc()
@@ -84,10 +152,12 @@ if PROMETHEUS_AVAILABLE:
         ACTIVE_JOBS.set(count)
 
     def get_metrics() -> bytes:
-        return generate_latest()  # type: ignore[no-any-return]
+        if PROMETHEUS_REGISTRY is not None:
+            return generate_latest(PROMETHEUS_REGISTRY)
+        return generate_latest()
 
     def get_content_type() -> str:
-        return CONTENT_TYPE_LATEST  # type: ignore[no-any-return]
+        return CONTENT_TYPE_LATEST
 else:
     # Stub functions when prometheus_client is not installed
     def record_settlement(decision_state: str, latency_seconds: float) -> None: pass
@@ -137,15 +207,8 @@ def record_groq_usage(tokens: int, model: str) -> None:
         _groq_daily_used[model] = _groq_daily_used.get(model, 0) + max(0, int(tokens))
     if PROMETHEUS_AVAILABLE:
         try:
-            from prometheus_client import Gauge as _Gauge
-
-            _g = _Gauge(
-                "nivara_groq_daily_tokens_used",
-                "Groq daily tokens consumed",
-                ["model"],
-            )
             with _groq_lock:
-                _g.labels(model=model).set(_groq_daily_used[model])
+                GROQ_DAILY_TOKENS_USED.labels(model=model).set(_groq_daily_used[model])
         except Exception:
             pass
 
