@@ -663,15 +663,6 @@ async def get_settlement(settlement_id: str) -> JSONResponse:
     })
 
 
-# ---------------------------------------------------------------------------
-# GET /health
-# ---------------------------------------------------------------------------
-
-@app.get("/health")
-async def health() -> JSONResponse:
-    return JSONResponse(content={"status": "ok", "version": "0.1.0"})
-
-
 @app.get("/audit/{upload_hash}/verify")
 async def verify_audit_chain(upload_hash: str) -> JSONResponse:
     """Verify hash chain integrity for a batch. Returns verification result."""
