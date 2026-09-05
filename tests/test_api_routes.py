@@ -6,7 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.generator import generate_batch
-from backend.main import app, MAX_UPLOAD_SIZE, _rate_limiter
+from backend.main import app
+from backend.routes.upload import MAX_UPLOAD_SIZE
+from backend.job_store import _rate_limiter
 
 client = TestClient(app)
 
@@ -194,7 +196,7 @@ class TestUploadValidation:
             name: (f"{name}.csv", _csv(data[name]).encode(), "text/csv")
             for name in ("transactions", "settlements", "refunds", "bank_credits")
         }
-        monkeypatch.setattr("backend.main.MAX_UPLOAD_SIZE", 10)
+        monkeypatch.setattr("backend.routes.upload.MAX_UPLOAD_SIZE", 10)
         r = client.post("/upload", files=files)
         assert r.status_code == 413
 

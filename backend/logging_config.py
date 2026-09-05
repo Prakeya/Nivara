@@ -16,6 +16,8 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
 # Correlation ID propagated across async tasks
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="-")
 
@@ -64,16 +66,16 @@ def generate_correlation_id() -> str:
 class CorrelationMiddleware:
     """FastAPI middleware that assigns a correlation ID to every request."""
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
             headers = dict(scope.get("headers", []))
             cid = headers.get(b"x-correlation-id", b"").decode() or generate_correlation_id()
             correlation_id.set(cid)
 
-            async def send_with_correlation(message):
+            async def send_with_correlation(message: Message) -> None:
                 if message["type"] == "http.response.start":
                     response_headers = list(message.get("headers", []))
                     response_headers.append((b"x-request-id", cid.encode()))

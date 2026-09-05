@@ -59,7 +59,7 @@ function AuditTrace({ auditRecords, uploadHash }) {
         <div style={{
           padding: '12px 16px',
           borderRadius: 'var(--radius)',
-          border: `1px solid ${verifyResult.valid ? '#bbf7d0' : '#fecaca'}`,
+          border: `1px solid ${verifyResult.valid ? 'var(--green)' : 'var(--red)'}`,
           background: verifyResult.valid ? 'var(--green-bg)' : 'var(--red-bg)',
           fontSize: '0.85rem',
           color: verifyResult.valid ? 'var(--green)' : 'var(--red)',
@@ -73,7 +73,7 @@ function AuditTrace({ auditRecords, uploadHash }) {
         </div>
       )}
 
-      <div style={{ padding: '10px 14px', background: 'var(--blue-bg)', borderRadius: 'var(--radius)', border: '1px solid #bfdbfe', fontSize: '0.8rem', color: 'var(--blue)', marginBottom: 16 }}>
+      <div style={{ padding: '10px 14px', background: 'var(--blue-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--blue)', fontSize: '0.8rem', color: 'var(--blue)', marginBottom: 16 }}>
         This audit trail is append-only. Records cannot be updated or deleted. Each record includes a SHA-256 hash of its payload plus the previous record's hash, creating a tamper-evident chain.
       </div>
 
@@ -91,7 +91,7 @@ function AuditTrace({ auditRecords, uploadHash }) {
             {auditRecords.map((r, i) => (
               <React.Fragment key={r.id || i}>
                 <tr>
-                  <td className="sid">{r.settlement_id}</td>
+                  <td className="sid chain-record">{r.settlement_id}</td>
                   <td><span className={`badge ${badgeClass(r.decision_state)}`}>{r.decision_state}</span></td>
                   <td style={{fontSize:'0.8rem', color:'var(--text-secondary)', fontFamily:'monospace'}}>{r.timestamp}</td>
                   <td style={{textAlign:'center'}}>

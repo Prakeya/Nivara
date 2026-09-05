@@ -11,8 +11,11 @@ Set NIVARA_SECRET_BACKEND to switch:
 from __future__ import annotations
 
 import json
+import logging
 import os
-from typing import Any, Optional
+from typing import Any, Optional, cast
+
+logger = logging.getLogger("nivara.secret_manager")
 
 SECRET_BACKEND = os.environ.get("NIVARA_SECRET_BACKEND", "env")
 _secret_cache: dict[str, str] = {}
@@ -39,17 +42,18 @@ def get_secret(name: str, default: Optional[str] = None) -> Optional[str]:
 def _get_from_aws(name: str) -> Optional[str]:
     """Retrieve secret from AWS Secrets Manager."""
     try:
-        import boto3
+        import boto3  # type: ignore[import-not-found]
         client = boto3.client("secretsmanager")
         response = client.get_secret_value(SecretId=name)
         secret = response.get("SecretString", "")
         # Try JSON parse
         try:
             data = json.loads(secret)
-            return data.get("value", secret)
+            return cast(str, data.get("value", secret))
         except json.JSONDecodeError:
-            return secret
+            return cast(str, secret)
     except Exception:
+        logger.exception("Failed to retrieve secret '%s' from AWS Secrets Manager", name)
         return None
 
 
@@ -68,8 +72,9 @@ def _get_from_vault(name: str) -> Optional[str]:
         )
         if resp.status_code == 200:
             data = resp.json()
-            return data.get("data", {}).get("data", {}).get("value")
+            return cast(Optional[str], data.get("data", {}).get("data", {}).get("value"))
     except Exception:
+        logger.exception("Failed to retrieve secret '%s' from HashiCorp Vault", name)
         return None
     return None
 

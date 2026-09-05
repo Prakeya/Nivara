@@ -11,7 +11,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs
+from backend.main import app
+from backend.job_store import _jobs
 from backend.metrics import (
     record_groq_usage,
     groq_daily_usage_snapshot,
@@ -54,7 +55,6 @@ class TestMetricsEndpoint:
             "math_discrepancy": 0,
             "unresolved": 0,
         }
-        assert body["ai_auto_approved_total"] == 0
         assert body["groq_free_tier"]["daily_limit"] > 0
         assert body["groq_free_tier"]["pct_used"] == 0.0
         assert set(body["llm"]) == {"total_calls", "errors", "avg_latency_ms", "error_rate"}

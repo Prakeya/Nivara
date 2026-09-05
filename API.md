@@ -16,8 +16,8 @@ With no `NIVARA_API_KEY`, demo access is open. When it is set, send `X-API-Key`.
 | POST | `/api/review/{settlement_id}/decision` | review | Submit human review decision |
 | GET | `/api/review/pending` | read | List pending reviews |
 | GET | `/api/review/{settlement_id}` | none | Read review status |
-| POST | `/api/fetch-razorpay` | API key check | Fetch settlement rows only |
-| POST | `/api/reconcile-razorpay` | API key check | Fetch Razorpay data and run reconciliation |
+| POST | `/api/fetch-razorpay` | upload | Fetch settlement rows only |
+| POST | `/api/reconcile-razorpay` | upload | Fetch Razorpay data and run reconciliation |
 | GET | `/api/metrics` | configure | Read JSON metrics |
 | GET | `/metrics` | none | Prometheus exposition when installed |
 | GET | `/health` | none | Deep health check |
@@ -163,3 +163,5 @@ The deep health response reports overall status and database, LLM, and disk chec
 ## Environment
 
 See `.env.example`. `GROQ_API_KEY` is required at application startup. Razorpay keys enable live import. `NIVARA_API_KEY` enables RBAC; `NIVARA_DATABASE_URL` selects the optional database abstraction branch.
+
+**Security:** if `NIVARA_API_KEY` is left unset, every caller is treated as `Role.ADMIN` — do not deploy without setting it.

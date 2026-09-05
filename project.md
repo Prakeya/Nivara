@@ -40,8 +40,8 @@ The deterministic engine owns financial calculations. MATH_DISCREPANCY cases can
 - Standard Checkout settlements only.
 - RazorpayX payouts, Smart Collect virtual accounts, and Route split settlements are not implemented.
 - Live fetch uses settlement-derived transaction and bank-credit rows when sandbox collections do not provide complete linkage.
-- The main upload/reconciliation audit path uses SQLite at `data/audit/audit.db`; the database abstraction contains an optional PostgreSQL branch, but it is not the active audit logger path.
-- Redis/Celery modules exist as optional code but are not part of the synchronous API path.
+- The main upload/reconciliation audit path uses SQLite at `data/audit/audit.db`; the database abstraction contains an optional PostgreSQL branch (used by the deep health check), but it is not the active audit logger path.
+- No async task queue — all processing is synchronous within the request handler.
 
 ## Tech Stack
 
@@ -63,7 +63,7 @@ The deterministic engine owns financial calculations. MATH_DISCREPANCY cases can
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 pytest -q
 pytest --cov=backend --cov-report=term -q

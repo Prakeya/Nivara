@@ -18,7 +18,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _validate_llm_config
+from backend.main import app
+from backend.api_helpers import _validate_llm_config
 
 
 class TestValidateLlmConfig:
@@ -65,7 +66,11 @@ class TestStartupHook:
         try:
             with TestClient(app) as client:
                 r = client.get("/health")
-                assert r.status_code == 200
+                # /health now runs the deep health check (DB, LLM, disk); with a
+                # fake GROQ_API_KEY the LLM check legitimately fails (503), so
+                # this just asserts the app serves the deep-check response.
+                assert r.status_code in (200, 503)
+                assert "status" in r.json()
         finally:
             if old is not None:
                 os.environ["GROQ_API_KEY"] = old

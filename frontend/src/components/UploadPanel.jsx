@@ -189,7 +189,7 @@ function UploadPanel({ onUploadComplete, loading }) {
             className="btn"
             disabled={fetchingRazorpay || uploading || loading}
             onClick={fetchFromRazorpay}
-            style={{ background: '#6366f1', color: '#fff', whiteSpace: 'nowrap' }}
+            style={{ background: 'var(--purple)', color: '#fff8ee', whiteSpace: 'nowrap' }}
           >
             {fetchingRazorpay && <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
             {fetchingRazorpay ? "Importing..." : "Import settlements"}
