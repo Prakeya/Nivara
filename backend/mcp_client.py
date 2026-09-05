@@ -20,10 +20,13 @@ Safety: This client is READ-ONLY. It never modifies settlement data.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,6 +68,7 @@ class RazorpayMCPClient:
         try:
             return cls(api_key=api_key, api_secret=api_secret)
         except Exception:
+            logger.exception("Failed to construct RazorpayMCPClient from environment credentials")
             return None
 
     def is_available(self) -> bool:
