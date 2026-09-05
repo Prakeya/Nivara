@@ -39,7 +39,7 @@ function ReviewQueue({ results, onSelect, onReview }) {
         </div>
       </div>
 
-      <div style={{ padding: '10px 14px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid #fde68a', fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 16 }}>
+      <div style={{ padding: '10px 14px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--orange)', fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 16 }}>
         These settlements have been escalated for human review. Nivara's AI investigates every discrepancy and generates structured evidence, but never auto-approves financial transactions. Humans retain final authority.
       </div>
 
@@ -74,9 +74,9 @@ function ReviewQueue({ results, onSelect, onReview }) {
                 <td style={{textAlign:'center'}}>
                   {onReview ? (
                     <div style={{display:'flex', gap: 4, justifyContent:'center'}}>
-                      <button className="btn btn-sm" style={{background:'#16a34a', color:'#fff', fontSize:'0.75rem', padding:'4px 8px'}}
+                      <button className="btn btn-sm" style={{background:'var(--green)', color:'#fff8ee', fontSize:'0.75rem', padding:'4px 8px'}}
                         onClick={(e) => { e.stopPropagation(); onReview(r.settlement_id, 'APPROVE'); }}>Approve</button>
-                      <button className="btn btn-sm" style={{background:'#dc2626', color:'#fff', fontSize:'0.75rem', padding:'4px 8px'}}
+                      <button className="btn btn-sm" style={{background:'var(--red)', color:'#fff8ee', fontSize:'0.75rem', padding:'4px 8px'}}
                         onClick={(e) => { e.stopPropagation(); onReview(r.settlement_id, 'REJECT'); }}>Reject</button>
                     </div>
                   ) : (

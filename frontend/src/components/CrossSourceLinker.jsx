@@ -10,10 +10,10 @@ function CrossSourceLinker({ status }) {
   const csvCounts = status.csv_counts || {};
   const sources = React.useMemo(() => {
     return [
-      { name: 'transactions.csv', label: 'Transactions', color: '#2563eb', icon: '\uD83D\uDCC4', count: csvCounts.transactions || 0, desc: 'Internal transaction records' },
-      { name: 'settlements.csv', label: 'Settlements', color: '#7c3aed', icon: '\uD83D\uDCB0', count: csvCounts.settlements || 0, desc: 'Settlement batch data' },
-      { name: 'refunds.csv', label: 'Refunds', color: '#dc2626', icon: '\uD83D\uDCB8', count: csvCounts.refunds || 0, desc: 'Refund transaction records' },
-      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#059669', icon: '\uD83C\uDFE6', count: csvCounts.bank_credits || 0, desc: 'Bank credit statements' },
+      { name: 'transactions.csv', label: 'Transactions', color: '#2f5f6f', icon: '\uD83D\uDCC4', count: csvCounts.transactions || 0, desc: 'Internal transaction records' },
+      { name: 'settlements.csv', label: 'Settlements', color: '#5b4a8a', icon: '\uD83D\uDCB0', count: csvCounts.settlements || 0, desc: 'Settlement batch data' },
+      { name: 'refunds.csv', label: 'Refunds', color: '#9c3b32', icon: '\uD83D\uDCB8', count: csvCounts.refunds || 0, desc: 'Refund transaction records' },
+      { name: 'bank_credits.csv', label: 'Bank Credits', color: '#2f6f52', icon: '\uD83C\uDFE6', count: csvCounts.bank_credits || 0, desc: 'Bank credit statements' },
     ];
   }, [csvCounts.transactions, csvCounts.settlements, csvCounts.refunds, csvCounts.bank_credits]);
 
@@ -24,15 +24,15 @@ function CrossSourceLinker({ status }) {
       const r = sample[i];
       // Transaction → Settlement link (every settlement has a transaction)
       if (i > 0) {
-        pairs.push({ from: 0, to: 1, fromIdx: i, toIdx: i, color: r.decision_state === 'CLEAN_MATCH' ? '#4ade80' : '#fbbf24' });
+        pairs.push({ from: 0, to: 1, fromIdx: i, toIdx: i, color: r.decision_state === 'CLEAN_MATCH' ? 'var(--green)' : 'var(--orange)' });
       }
       // Settlement → Bank Credit link (when difference is non-zero, bank credit matters)
       if (r.difference_paise !== 0) {
-        pairs.push({ from: 1, to: 3, fromIdx: i, toIdx: i, color: '#f87171' });
+        pairs.push({ from: 1, to: 3, fromIdx: i, toIdx: i, color: 'var(--red)' });
       }
       // Settlement → Refund link (only when refund-related checks failed)
       if (r.deterministic_checks_failed && r.deterministic_checks_failed.some(c => c.includes('refund'))) {
-        pairs.push({ from: 1, to: 2, fromIdx: i, toIdx: i, color: '#94a3b8' });
+        pairs.push({ from: 1, to: 2, fromIdx: i, toIdx: i, color: 'var(--text-muted)' });
       }
     }
     return pairs;
@@ -41,7 +41,7 @@ function CrossSourceLinker({ status }) {
   const [hovered, setHovered] = React.useState(null);
 
   return (
-    <div className="card" style={{ borderLeft: '3px solid #0ea5e9' }}>
+    <div className="card" style={{ borderLeft: '3px solid var(--blue)' }}>
       <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: '1.1rem' }}>&#128279;</span> Cross-Source Visual Linker
       </div>
@@ -57,16 +57,16 @@ function CrossSourceLinker({ status }) {
         >
           <defs>
             <linearGradient id="linkGradGood" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#4ade80" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#4ade80" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="var(--green)" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="var(--green)" stopOpacity="0.3" />
             </linearGradient>
             <linearGradient id="linkGradWarn" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="var(--orange)" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="var(--orange)" stopOpacity="0.3" />
             </linearGradient>
             <linearGradient id="linkGradBad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#f87171" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#f87171" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="var(--red)" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="var(--red)" stopOpacity="0.3" />
             </linearGradient>
           </defs>
           {linkedPairs.slice(0, 12).map((p, i) => {
@@ -116,7 +116,7 @@ function CrossSourceLinker({ status }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--blue-bg)', borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--blue)', border: '1px solid #bfdbfe' }}>
+      <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--blue-bg)', borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--blue)', border: '1px solid var(--blue)' }}>
         <strong>Linkage Status:</strong> {cleanCount} settlements matched cleanly across all 4 sources &bull; {exceptionCount} settlements have discrepancies requiring review
       </div>
     </div>
