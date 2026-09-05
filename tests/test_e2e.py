@@ -221,7 +221,7 @@ class TestE2EHashChain:
 class TestE2EHumanReview:
     def test_upload_pending_review_audit(self):
         """Full flow: upload -> get pending -> review decision -> verify status."""
-        from backend.main import _jobs
+        from backend.job_store import _jobs
         from fastapi.testclient import TestClient
         from backend.main import app
         from tests.test_api import _make_upload_files

@@ -18,7 +18,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _validate_llm_config
+from backend.main import app
+from backend.api_helpers import _validate_llm_config
 
 
 class TestValidateLlmConfig:
