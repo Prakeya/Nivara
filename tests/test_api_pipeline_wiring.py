@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from backend.audit import AuditLogger
-from backend.main import process_reconciliation_results
+from backend.response_shaping import process_reconciliation_results
 from backend.models import (
     AIClassification,
     AIResponse,
@@ -36,8 +36,8 @@ def _ai_response() -> AIResponse:
 
 def test_process_results_routes_valid_ai_to_review(tmp_path):
     audit = AuditLogger(str(tmp_path / "audit.db"))
-    with patch("backend.main.ModelSelector.select", return_value="test-model") as select_model, patch(
-        "backend.main.ai_investigator.investigate_v2", return_value=_ai_response()
+    with patch("backend.model_selector.ModelSelector.select", return_value="test-model") as select_model, patch(
+        "backend.ai_investigator.investigate_v2", return_value=_ai_response()
     ) as investigate:
         results = process_reconciliation_results(
             [_result()], audit, "a" * 64, ai_enabled=True
@@ -60,7 +60,7 @@ def test_process_results_routes_valid_ai_to_review(tmp_path):
 def test_process_results_routes_invalid_ai_to_unresolved(tmp_path):
     audit = AuditLogger(str(tmp_path / "audit.db"))
     with patch(
-        "backend.main.ai_investigator.investigate_v2",
+        "backend.ai_investigator.investigate_v2",
         return_value=None,
     ):
         results = process_reconciliation_results(

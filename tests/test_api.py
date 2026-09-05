@@ -11,7 +11,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs
+from backend.main import app
+from backend.job_store import _jobs
 from backend.generator import generate_batch
 
 client = TestClient(app)
@@ -54,11 +55,17 @@ def _make_upload_files(data: dict):
 # ---------------------------------------------------------------------------
 
 class TestHealth:
-    def test_health_returns_ok(self):
+    def test_health_returns_ok(self, monkeypatch):
+        from backend import health
+
+        monkeypatch.setattr(health, "check_database", lambda: {"status": "ok"})
+        monkeypatch.setattr(health, "check_llm", lambda: {"status": "ok"})
+        monkeypatch.setattr(health, "check_disk", lambda: {"status": "ok", "used_pct": 50})
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json()["status"] == "ok"
-        assert response.json()["version"] == "0.1.0"
+        body = response.json()
+        assert body["status"] == "healthy"
+        assert set(body["checks"]) == {"database", "llm", "disk"}
 
 
 # ---------------------------------------------------------------------------

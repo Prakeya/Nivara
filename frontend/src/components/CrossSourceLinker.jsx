@@ -1,3 +1,4 @@
+import React from 'react';
 function CrossSourceLinker({ status }) {
   if (!status || !status.results) return null;
 
@@ -122,4 +123,5 @@ function CrossSourceLinker({ status }) {
   );
 }
 
-window.CrossSourceLinker = CrossSourceLinker;
+
+export default CrossSourceLinker;

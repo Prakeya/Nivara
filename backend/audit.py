@@ -24,6 +24,7 @@ Schema:
 
 import hashlib
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -31,6 +32,8 @@ from uuid import uuid4
 
 from backend.models import DecisionState, ReconciliationResult, HumanReviewDecision
 from backend.pii_redaction import redact_dict
+
+logger = logging.getLogger("nivara.audit")
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +248,10 @@ class AuditLogger:
             assert self._conn is not None
             self._conn.commit()
         except Exception:
+            logger.exception(
+                "Failed to write audit record for upload_hash=%s settlement_id=%s; rolling back",
+                upload_hash, result.settlement_id,
+            )
             if self._conn is not None:
                 self._conn.rollback()
             raise
@@ -451,6 +458,10 @@ class AuditLogger:
             assert self._conn is not None
             self._conn.commit()
         except Exception:
+            logger.exception(
+                "Failed to write human_review audit record for settlement_id=%s; rolling back",
+                settlement_id,
+            )
             if self._conn is not None:
                 self._conn.rollback()
             raise

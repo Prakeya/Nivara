@@ -1,3 +1,4 @@
+import React from 'react';
 function CashFlowImpact({ status }) {
   if (!status || !status.results) return null;
 
@@ -93,4 +94,5 @@ function CashFlowImpact({ status }) {
   );
 }
 
-window.CashFlowImpact = CashFlowImpact;
+
+export default CashFlowImpact;

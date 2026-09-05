@@ -4,10 +4,16 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 
+from backend import rbac as rbac_module
 from backend.main import app
 from backend.mcp_client import RazorpayMCPClient, MCPSettlement
 
 client = TestClient(app)
+
+
+def _reset_role_map(monkeypatch):
+    """Clear the cached RBAC role map so env-var changes take effect."""
+    monkeypatch.setattr(rbac_module, "_role_map", None)
 
 
 class TestRazorpayEndpoint:
@@ -169,6 +175,60 @@ class TestReconcileRazorpayEndpoint:
             r = client.post("/api/reconcile-razorpay", json={})
             assert r.status_code == 502
             assert "Connection refused" in r.json()["detail"]
+
+
+class TestRazorpayRBAC:
+    """RBAC gating on /api/fetch-razorpay and /api/reconcile-razorpay.
+
+    Both endpoints must require the same `upload` permission as /upload
+    (via `require_upload`), not just a raw API-key match.
+    """
+
+    def test_fetch_razorpay_viewer_forbidden(self, monkeypatch):
+        _reset_role_map(monkeypatch)
+        monkeypatch.setenv("NIVARA_API_KEY", "admin-secret")
+        monkeypatch.setenv("NIVARA_ROLE_viewerkey", "viewer")
+
+        r = client.post(
+            "/api/fetch-razorpay", json={}, headers={"X-API-Key": "viewerkey"}
+        )
+        assert r.status_code == 403
+        assert "upload" in r.json()["detail"]
+
+    def test_reconcile_razorpay_viewer_forbidden(self, monkeypatch):
+        _reset_role_map(monkeypatch)
+        monkeypatch.setenv("NIVARA_API_KEY", "admin-secret")
+        monkeypatch.setenv("NIVARA_ROLE_viewerkey", "viewer")
+
+        r = client.post(
+            "/api/reconcile-razorpay", json={}, headers={"X-API-Key": "viewerkey"}
+        )
+        assert r.status_code == 403
+        assert "upload" in r.json()["detail"]
+
+    def test_fetch_razorpay_admin_passes_rbac(self, monkeypatch):
+        _reset_role_map(monkeypatch)
+        monkeypatch.setenv("NIVARA_API_KEY", "admin-secret")
+        monkeypatch.setenv("NIVARA_ROLE_adminkey", "admin")
+
+        with patch.object(RazorpayMCPClient, "from_env", return_value=None):
+            r = client.post(
+                "/api/fetch-razorpay", json={}, headers={"X-API-Key": "adminkey"}
+            )
+        # Not rejected at the RBAC layer — reaches the downstream
+        # missing-credentials error instead of a 403.
+        assert r.status_code == 503
+
+    def test_reconcile_razorpay_admin_passes_rbac(self, monkeypatch):
+        _reset_role_map(monkeypatch)
+        monkeypatch.setenv("NIVARA_API_KEY", "admin-secret")
+        monkeypatch.setenv("NIVARA_ROLE_adminkey", "admin")
+
+        with patch.object(RazorpayMCPClient, "from_env", return_value=None):
+            r = client.post(
+                "/api/reconcile-razorpay", json={}, headers={"X-API-Key": "adminkey"}
+            )
+        assert r.status_code == 503
 
 
 class TestMCPClientUnit:

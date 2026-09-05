@@ -1,3 +1,4 @@
+import React from 'react';
 function SettlementSimulator({ results, streamedIds, onStreamedIdsChange }) {
   const [running, setRunning] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
@@ -106,4 +107,5 @@ function SettlementSimulator({ results, streamedIds, onStreamedIdsChange }) {
   );
 }
 
-window.SettlementSimulator = SettlementSimulator;
+
+export default SettlementSimulator;

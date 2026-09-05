@@ -83,6 +83,13 @@ export GROQ_API_KEY=your_groq_key
 uvicorn backend.main:app --reload
 ```
 
+To run the test suite, install dev dependencies (adds `pytest` on top of `requirements.txt`):
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
 For the frontend development server:
 
 ```bash
@@ -114,6 +121,8 @@ See [API.md](API.md) for request/response schemas and curl examples.
 | GET | `/health` | Deep health check |
 
 When `NIVARA_API_KEY` is set, use `X-API-Key`. Roles are configured with `NIVARA_ROLE_<key>=admin|reviewer|viewer`.
+
+**Security warning:** if `NIVARA_API_KEY` is left unset, RBAC is bypassed entirely and every request is treated as `Role.ADMIN` — no key required (see `backend/rbac.py`). This is a demo-friendly default, not a safe one. Do not deploy this service anywhere reachable by untrusted callers without setting `NIVARA_API_KEY`.
 
 ## Tech Stack
 
