@@ -1,245 +1,96 @@
-# Nivara — AI Settlement Intelligence Agent
+# Nivara
 
-**Track:** Razorpay Buildathon Track 04 — AI Finance Controller  
-**Status:** Complete  
-**Architecture Version:** 1.3 (Frozen)
+Nivara is a FastAPI and React settlement-reconciliation application for Razorpay Standard Checkout data. It accepts four CSV files or imports Razorpay settlements through the live integration, then produces deterministic results, optional Groq investigation, human-review state, and append-only audit records.
 
----
+## Problem
 
-## The Problem
+Merchants must reconcile payment transactions, refunds, settlement reports, and bank credits. Nivara checks references, linkage, fees, taxes, bank credits, UTRs, and settlement arithmetic using integer paise values.
 
-Reconciliation is still done by hand. A merchant receives a Razorpay settlement report, a bank statement, and a pile of transaction records — then spends hours matching UTRs, verifying fees, and hunting for missing refunds.
+## Solution
 
-Most "AI reconciliation" tools dump raw CSV into an LLM and ask "does this match?" This is dangerous. The LLM hallucinates amounts, invents explanations, and auto-approves discrepancies it doesn't understand.
+The deterministic engine owns financial calculations. MATH_DISCREPANCY cases can be investigated with structured evidence through the Groq fallback chain; AI output is validated and remains advisory. Human review decisions are submitted through the review API and written to the audit log.
 
-**We built the opposite.**
+## Implemented Features
 
----
+- Twelve deterministic reconciliation checks in `backend/engine.py`.
+- `EvidencePacketV2` structured evidence contract.
+- Deterministic guard functions that limit AI investigation to `MATH_DISCREPANCY`.
+- AI response citation validation in `backend/ai_validator.py` and `backend/ai_investigator.py`.
+- Groq client with 70B primary and 8B fallback model selection.
+- Groq fallback chain with rate limiting and circuit breaker support.
+- Upload hash idempotency: completed uploads with audit records return the cached job.
+- Razorpay live settlement, payment, refund, and transfer fetch through `/api/reconcile-razorpay`.
+- Settlement-derived transaction and bank-credit fallback when sandbox linkage is incomplete.
+- RBAC dependencies for upload, review, read, and configure permissions.
+- PII redaction in persisted audit payloads.
+- Prometheus-compatible metrics when `prometheus-client` is installed, JSON metrics, and correlation-ID middleware.
+- SHA-256 hash-chained append-only audit records.
+- Human review queue and decision endpoint.
 
-## What Nivara Does
+## Architecture Principles
 
-Nivara reconciles Razorpay settlements across four CSV sources:
+- **Deterministic veto:** deterministic exceptions remain exceptions.
+- **Advisory-only AI:** AI does not calculate amounts or approve financial decisions.
+- **Evidence-bound explanations:** cited evidence must exist in the evidence packet.
+- **Fail-safe uncertainty:** failed or invalid AI investigation becomes unresolved/human-review work.
+- **Traceability:** upload hashes, audit records, decision states, and request IDs are observable.
 
-- `transactions.csv` — captured payments
-- `refunds.csv` — refund records  
-- `settlements.csv` — Razorpay settlement reports
-- `bank_credits.csv` — bank statement credits
+## Current Limitations
 
-It processes a batch of 80+ settlements and reports:
-- **Match rate** — how many settlements reconcile cleanly
-- **Exception list** — what broke and why
-- **Unresolved cases** — what the system honestly could not explain
-
----
-
-## The Core Idea
-
-> **Deterministic when provable. AI when reasoning is required. Human when uncertainty remains.**
-
-### Three Lines of Defense
-
-1. **Python Deterministic Engine** — Proves the math. Checks every reference, validates every fee, computes every expected amount. If it can explain the discrepancy with a rule, it does. No LLM involved.
-
-2. **AI Investigator** — Steps in only when the math doesn't match and the rules can't explain why. It receives **structured evidence** (not raw CSV) and classifies the discrepancy. It **never** calculates, **never** approves, **never** invents records.
-
-3. **Human Review Queue** — Every AI-investigated case routes here. The human reads the AI's explanation, checks the evidence, and clicks "Approve" or "Reject." The AI does not auto-approve anything. Ever.
-
----
-
-## Why This Is Not an LLM Wrapper
-
-| Wrapper Behavior | Nivara Behavior |
-|---|---|
-| Dumps raw CSV into LLM | Sends structured evidence packet with pre-computed amounts |
-| LLM calculates `expected = payments - refunds` | Python calculates expected amount; LLM never sees raw numbers |
-| LLM says "this looks fine" and approves | LLM classifies only; human must approve |
-| LLM invents a refund to explain a gap | LLM citation validator rejects hallucinated evidence |
-| One cherry-picked demo match | 80-settlement batch with measured accuracy and honest exceptions |
-
----
-
-## Safety Architecture
-
-**Five hard guarantees:**
-
-1. **AI never calculates money.** All arithmetic is done by Python. The LLM receives only pre-computed summaries.
-2. **AI never modifies financial records.** The LLM output schema has no `amount`, `fee`, `refund`, or `tax` fields. `extra="forbid"` prevents injection.
-3. **AI never auto-approves.** The `recommended_action` field is hardcoded to `ESCALATE_TO_HUMAN`. The system enforces `auto_approved_by_ai == 0` at the model level.
-4. **Every AI claim must cite evidence.** The LLM must reference evidence IDs from the packet. Uncited claims are rejected with confidence 0.0.
-5. **LLM failures fail safely.** Timeout, API error, rate limit, malformed JSON, hallucination — all route to `UNRESOLVED` + human review. No retries.
-
----
-
-## Architecture (High-Level)
-
-```
-CSV Upload → Validation → Normalization → Entity Linking
-                    ↓
-    Deterministic Reconciliation Engine
-                    ↓
-        ┌───────────┴───────────┐
-        ↓                       ↓
-   CLEAN_MATCH             MATH_DISCREPANCY
-   (no discrepancy)        (all rules pass,
-        ↓                  but math doesn't)
-   Audit Trail                  ↓
-        ↓              AI Investigator
-   Dashboard             (structured evidence)
-                              ↓
-                    ┌─────────┼─────────┐
-                    ↓         ↓         ↓
-               EXPLAINED  REVIEW   UNRESOLVED
-                    │      REQUIRED      │
-                    └───────┼───────────┘
-                            ↓
-                     Human Review Queue
-                            ↓
-                       Audit Trail
-                            ↓
-                       Dashboard
-```
-
-**Read the full architecture:** [architecture.md](architecture.md)
-
----
+- Standard Checkout settlements only.
+- RazorpayX payouts, Smart Collect virtual accounts, and Route split settlements are not implemented.
+- Live fetch uses settlement-derived transaction and bank-credit rows when sandbox collections do not provide complete linkage.
+- The main upload/reconciliation audit path uses SQLite at `data/audit/audit.db`; the database abstraction contains an optional PostgreSQL branch, but it is not the active audit logger path.
+- Redis/Celery modules exist as optional code but are not part of the synchronous API path.
 
 ## Tech Stack
 
-| Layer | Technology |
+| Area | Implemented technology |
 |---|---|
-| Backend | Python, FastAPI, Pydantic, Pandas |
-| Database | SQLite (append-only audit log) |
-| AI | LLM API (GPT-4o / Claude 3.5 Sonnet) |
-| Frontend | Minimal React |
-| Validation | Pydantic strict mode, integer paise only |
+| Runtime | Python 3.12 Docker image; Python 3.11+ compatible code |
+| API | FastAPI, Uvicorn, Starlette |
+| Models | Pydantic v2 |
+| Ingestion | Python CSV parsing and Pandas |
+| AI | Groq SDK, optional OpenAI import used by the investigator |
+| HTTP | httpx |
+| Persistence | SQLite audit logger; optional psycopg2 database abstraction |
+| Metrics | prometheus-client when installed, plus in-memory JSON metrics |
+| Frontend | React 18, Vite, Recharts |
+| Tests | pytest and pytest-cov |
 
----
-
-## How to Run
-
-### Prerequisites
+## Development
 
 ```bash
-python 3.11+
+python3 -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+pytest -q
+pytest --cov=backend --cov-report=term -q
+python3 -m compileall -q backend
 ```
 
-### Generate Synthetic Data
+Start the API:
 
 ```bash
-python backend/generator.py --output data/evaluation/ --count 80
+GROQ_API_KEY=your_key uvicorn backend.main:app --reload
 ```
 
-This creates 80 settlements with known ground truth: clean matches, missing references, bank mismatches, fee mismatches, timing issues, and unexplained gaps.
-
-### Run the Backend
+Start the frontend separately:
 
 ```bash
-uvicorn backend.main:app --reload
+cd frontend
+npm install
+npm run dev
 ```
 
-### Upload and Process
+Generate sample files with `python3 scripts/demo.py` or use the checked-in files under `data/demo/` and `data/evaluation/`.
 
-1. Open the frontend at `http://localhost:8000`
-2. Drag and drop the 4 CSV files from `data/evaluation/`
-3. View the dashboard: match rate, exception list, unresolved cases
-4. Click any settlement to see the full reconciliation trace
-5. Review AI-investigated cases in the human queue
-
-### Run Evaluation
+## Deployment
 
 ```bash
-python -m pytest tests/test_e2e.py -v
+docker build -t nivara .
+docker compose up --build
 ```
 
-This runs the full pipeline against ground truth and reports:
-- Match rate
-- False accept rate
-- AI invocation rate
-- Processing time per settlement
-
----
-
-## Demo Script (5 Minutes)
-
-| Time | What You Show |
-|---|---|
-| 0:00 | Upload 4 CSVs. Dashboard: "80 processed, 70 clean, 10 exceptions, 0 unresolved, **0 auto-approved**" |
-| 0:45 | Click a **CLEAN_MATCH**. Show the reconciliation trace: every amount calculated by Python, no AI involved. |
-| 1:30 | Click a **FEE_MISMATCH**. Show: "AI not required. Deterministic rule identified the exact violation." |
-| 2:00 | Click a **REFUND_TIMING** case. Expand the AI evidence packet. Show the structured JSON sent to the LLM. Confidence: 0.82. Status: **REVIEW_REQUIRED**. |
-| 2:45 | Click "Approve Explanation." Status changes to **EXPLAINED**. Audit trail records the human action. |
-| 3:15 | Click the **UNRESOLVED** case (₹1,775 gap). AI: "INSUFFICIENT EVIDENCE. ESCALATED TO HUMAN REVIEW." Confidence: 0.15. |
-| 3:45 | Show the **Safety Guarantees** panel. "AI never calculates, never approves, never invents evidence." |
-| 4:00 | Show **Batch Patterns**: "3 settlements on Aug 20 show 1-paise fee mismatches. Suggest reviewing fee rounding rule." |
-| 4:45 | Show **Evaluation Metrics**: "Ground truth: 80 labeled. Match rate 87.5%. False accept 5.0%. **0 auto-approved.**" |
-
----
-
-## Key Metrics (From Evaluation Harness)
-
-| Metric | Target | Why It Matters |
-|---|---|---|
-| **Match Rate** | ~87% | Honest accuracy on synthetic ground truth |
-| **False Accept Rate** | <5% | Critical safety metric — how many bad settlements were marked clean |
-| **AI Invocation Rate** | ~15% | Proves AI is used appropriately, not as a default |
-| **AI Auto-Approval Rate** | **0%** | By design. AI never approves. |
-| **Processing Time** | <1s/settlement | Throughput for 50+ record batches |
-
----
-
-## What We Did NOT Build
-
-- User authentication (single-user demo)
-- PostgreSQL (SQLite is sufficient for 50+ records)
-- Real-time webhooks (batch processing only)
-- Email/Slack notifications (out of scope)
-- PDF or bank statement OCR (CSV input only)
-- Multi-currency (INR/paise only)
-- Chart visualizations (tables are sufficient)
-- LLM fine-tuning (prompt engineering only)
-- Microservices, Kubernetes (flat Python files)
-
-**See full scope lock:** [architecture.md#scope-lock](architecture.md)
-
----
-
-## Project Structure
-
-```
-nivara/
-├── backend/
-│   ├── main.py              # FastAPI endpoints
-│   ├── models.py            # Pydantic data models (strict, validated)
-│   ├── ingestion.py         # CSV validation + idempotency
-│   ├── linking.py           # Entity linker
-│   ├── engine.py            # Deterministic reconciliation
-│   ├── ai_investigator.py   # LLM integration (constrained)
-│   ├── batch_analyzer.py    # Cross-settlement pattern detection
-│   ├── audit.py             # Append-only audit logger
-│   ├── generator.py         # Synthetic data with ground truth
-│   ├── evaluation.py        # Evaluation harness
-│   └── mcp_client.py        # Razorpay MCP API client
-├── frontend/                # Minimal React
-├── tests/                   # Test-first checkpoints
-├── architecture.md          # Full technical specification
-├── Dockerfile               # Container build
-├── docker-compose.yml       # Container orchestration
-└── README.md                # This file
-```
-
----
-
-## Safety-First Design Philosophy
-
-This project is built on a simple conviction: **in financial systems, the AI must know when it doesn't know.**
-
-Most AI demos optimize for accuracy. We optimized for **honest uncertainty.** The system's proudest moment is not when it explains a discrepancy — it's when it **refuses to guess** and escalates to a human.
-
-That refusal is not a bug. It's the feature.
-
----
-
-## License
-
-MIT — Built for Razorpay Buildathon 2026.
+The compose file provisions PostgreSQL and Redis services for the production-oriented stack, while the current main audit path remains SQLite unless the application integration is changed.

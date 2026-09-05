@@ -72,4 +72,13 @@ class CorrelationMiddleware:
             headers = dict(scope.get("headers", []))
             cid = headers.get(b"x-correlation-id", b"").decode() or generate_correlation_id()
             correlation_id.set(cid)
+
+            async def send_with_correlation(message):
+                if message["type"] == "http.response.start":
+                    response_headers = list(message.get("headers", []))
+                    response_headers.append((b"x-request-id", cid.encode()))
+                    message = {**message, "headers": response_headers}
+                await send(message)
+
+            return await self.app(scope, receive, send_with_correlation)
         return await self.app(scope, receive, send)

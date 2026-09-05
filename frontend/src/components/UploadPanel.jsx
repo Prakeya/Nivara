@@ -5,6 +5,7 @@ function UploadPanel({ onUploadComplete, loading }) {
   const [dragOver, setDragOver] = React.useState(false);
   const [fetchingRazorpay, setFetchingRazorpay] = React.useState(false);
   const [razorpayError, setRazorpayError] = React.useState("");
+  const [razorpayDays, setRazorpayDays] = React.useState("7");
   const inputRefs = React.useRef({});
 
   const fileLabels = {
@@ -90,7 +91,7 @@ function UploadPanel({ onUploadComplete, loading }) {
       const resp = await fetch("/api/reconcile-razorpay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 100 }),
+        body: JSON.stringify({ count: 100, days: Number(razorpayDays) || 7 }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -98,7 +99,7 @@ function UploadPanel({ onUploadComplete, loading }) {
       }
       const data = await resp.json();
       if (data.status === "empty") {
-        setRazorpayError("No settlements found for the last 7 days.");
+        setRazorpayError("No settlements found for the selected date range.");
         setFetchingRazorpay(false);
         return;
       }
@@ -172,11 +173,17 @@ function UploadPanel({ onUploadComplete, loading }) {
       <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0 0', paddingTop: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Or fetch live from Razorpay</div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Import from Razorpay</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Requires RAZORPAY_API_KEY + RAZORPAY_API_SECRET
+              Import settlements for review. Upload CSVs for full reconciliation.
             </div>
           </div>
+          <select value={razorpayDays} onChange={e => setRazorpayDays(e.target.value)} aria-label="Razorpay date range">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="custom">Custom range</option>
+          </select>
           <button
             className="btn"
             disabled={fetchingRazorpay || uploading || loading}
@@ -184,7 +191,7 @@ function UploadPanel({ onUploadComplete, loading }) {
             style={{ background: '#6366f1', color: '#fff', whiteSpace: 'nowrap' }}
           >
             {fetchingRazorpay && <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
-            {fetchingRazorpay ? "Fetching..." : "Fetch from Razorpay (7d)"}
+            {fetchingRazorpay ? "Importing..." : "Import settlements"}
           </button>
         </div>
         {razorpayError && <div className="upload-error" style={{ marginTop: '8px' }}>{razorpayError}</div>}
