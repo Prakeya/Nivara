@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import ast
 import hashlib
+import json
 import logging
 import os
 import re
@@ -36,9 +37,13 @@ from starlette.responses import Response
 
 from backend.audit import AuditLogger
 from backend.batch_analyzer import analyze_batch
+from backend import ai_investigator
+from backend.ai_validator import AIValidator, ValidationResult
+from backend.deterministic_guard import DeterministicGuard
 from backend.engine import run_engine
 from backend.ingestion import IngestionResult, ingest_csvs
-from backend.models import HumanReviewDecision, ReconciliationResult, ResolutionStatus, ReviewDecision
+from backend.model_selector import ModelSelector
+from backend.models import DecisionState, HumanReviewDecision, ReconciliationResult, ResolutionStatus, ReviewDecision
 from backend.rbac import require_configure, require_read, require_review, require_upload
 from backend.logging_config import CorrelationMiddleware
 
@@ -248,6 +253,63 @@ def _result_to_dict(r: ReconciliationResult, gt_label: str | None = None) -> dic
     return d
 
 
+def process_reconciliation_results(
+    results: list[ReconciliationResult],
+    audit: AuditLogger,
+    upload_hash: str,
+    ai_enabled: bool,
+) -> list[ReconciliationResult]:
+    """Apply guard, model selection, AI validation, and final audit logging."""
+    for result in results:
+        guard_decision = DeterministicGuard.route(result.decision)
+        validation: ValidationResult | None = None
+        ai_response = None
+
+        if guard_decision.requires_ai and ai_enabled:
+            evidence = result.evidence_packet
+            model_name = ModelSelector.select(evidence)
+            ai_response = ai_investigator.investigate_v2(
+                evidence_packet_v2=evidence,
+                expected_amount_paise=result.expected_amount_paise,
+                actual_amount_paise=result.actual_amount_paise,
+                difference_paise=result.difference_paise,
+                model_name=model_name,
+            ) if evidence is not None else None
+            validation = AIValidator.validate(
+                ai_response=ai_response,
+                evidence_packet=evidence,
+                expected_paise=result.expected_amount_paise,
+                actual_paise=result.actual_amount_paise,
+            )
+            if validation.is_valid:
+                result.ai_response = ai_response
+                result.resolution_confidence = ai_response.raw_confidence if ai_response else None
+                result.resolution_source = "ai"
+                result.ai_mode = "live"
+                result.decision = DecisionState.REVIEW_REQUIRED
+            else:
+                result.decision = DecisionState.UNRESOLVED
+                result.escalate_to_human = True
+                logger.warning(
+                    "AI validation failed for %s: %s",
+                    result.settlement_id,
+                    validation.violations,
+                )
+        elif guard_decision.requires_ai:
+            result.decision = DecisionState.UNRESOLVED
+            result.escalate_to_human = True
+            validation = ValidationResult(False, ["AI client is not configured"])
+
+        audit.log_result(
+            upload_hash,
+            result,
+            validation_result=validation,
+            evidence_packet=result.evidence_packet,
+        )
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
@@ -392,7 +454,13 @@ async def upload_files(
             settlements=ingestion.settlements,
             refunds=ingestion.refunds,
             bank_credits=ingestion.bank_credits,
-            llm_client=llm_client,
+            llm_client=None,
+        )
+        results = process_reconciliation_results(
+            results,
+            audit=audit,
+            upload_hash=upload_hash,
+            ai_enabled=llm_client is not None,
         )
 
         # Store CSV row counts for frontend display
@@ -417,12 +485,10 @@ async def upload_files(
         ]
 
         # Audit log (persistent storage)
-        audit.log_batch(upload_hash, results)
         audit_records = [r.to_dict() for r in audit.get_batch(upload_hash)]
 
         # Counts — REVIEW_REQUIRED counts as exception (human-reviewable),
         # matching the evaluation's definition of "correctly caught".
-        from backend.models import DecisionState
         clean = sum(1 for r in results if r.decision == DecisionState.CLEAN_MATCH)
         math_disc = sum(1 for r in results if r.decision == DecisionState.MATH_DISCREPANCY)
         exceptions = sum(
@@ -1110,8 +1176,10 @@ async def reconcile_razorpay(
                 "date": settlement["settled_at"],
             })
 
-    from backend.engine import run_engine
-    from backend.models import DecisionState
+    live_upload_hash = hashlib.sha256(
+        json.dumps(settlement_rows, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    audit = _get_audit_logger()
 
     job_id = uuid.uuid4().hex[:12]
     try:
@@ -1120,7 +1188,13 @@ async def reconcile_razorpay(
             settlements=settlement_rows,
             refunds=refunds,
             bank_credits=bank_credits,
-            llm_client="groq",
+            llm_client=None,
+        )
+        results = process_reconciliation_results(
+            results,
+            audit=audit,
+            upload_hash=live_upload_hash,
+            ai_enabled=_get_llm_client() is not None,
         )
     except Exception as exc:
         logger.exception("Engine failed for Razorpay reconciliation")
@@ -1139,10 +1213,11 @@ async def reconcile_razorpay(
         clean_matches=clean,
         exceptions=exceptions,
         unresolved=unresolved,
+        upload_hash=live_upload_hash,
         match_rate=round(clean / len(results) * 100, 1) if results else 0,
         results=[_result_to_dict(r) for r in results],
         batch_analysis=[],
-        audit_records=[],
+        audit_records=[r.to_dict() for r in audit.get_batch(live_upload_hash)],
     )
     with _jobs_lock:
         _jobs[job_id] = job
@@ -1150,6 +1225,7 @@ async def reconcile_razorpay(
     return JSONResponse(content={
         "status": "completed",
         "job_id": job_id,
+        "upload_hash": live_upload_hash,
         "total_settlements": len(results),
         "clean_matches": clean,
         "exceptions": exceptions,

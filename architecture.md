@@ -84,6 +84,8 @@ stateDiagram-v2
 
 `CLEAN_MATCH` and `DETERMINISTIC_EXCEPTION` are final deterministic outcomes. `MATH_DISCREPANCY` receives optional AI investigation and remains human-reviewable. Invalid or unavailable AI becomes `UNRESOLVED`.
 
+DeterministicGuard, AIValidator, and ModelSelector are fully wired into the `/upload` and `/api/reconcile-razorpay` pipelines. The Guard prevents AI override, the Selector chooses a model by evidence complexity, and the Validator rejects invalid citations before results reach human reviewers.
+
 ## Data and Persistence
 
 The active audit path is SQLite at `data/audit/audit.db`, and jobs are held in the process-local `_jobs` store. `backend/database.py` contains a separate optional PostgreSQL abstraction selected by `NIVARA_DATABASE_URL`; it is not currently used by `AuditLogger`. Redis/Celery support is present in optional task code but is not used by the synchronous upload handler.

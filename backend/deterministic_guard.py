@@ -12,6 +12,7 @@ Core rules:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from backend.models import DecisionState, AIResponse
@@ -27,6 +28,25 @@ class GuardViolation(Exception):
         self.rule = rule
         self.message = message
         super().__init__(f"[{rule}] {message}")
+
+
+@dataclass(frozen=True)
+class GuardDecision:
+    """Routing decision exposed to API orchestration code."""
+
+    final_state: DecisionState
+    requires_ai: bool
+
+
+class DeterministicGuard:
+    """Explicit API facade for the deterministic AI veto rules."""
+
+    @staticmethod
+    def route(decision: DecisionState) -> GuardDecision:
+        return GuardDecision(
+            final_state=decision,
+            requires_ai=should_invoke_ai(decision),
+        )
 
 
 def should_invoke_ai(decision: DecisionState) -> bool:
