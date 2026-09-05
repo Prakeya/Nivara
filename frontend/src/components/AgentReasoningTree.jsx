@@ -5,7 +5,7 @@ function AgentReasoningTree({ agentResponse }) {
 
   if (!agentResponse || !agentResponse.trace || !agentResponse.trace.steps || agentResponse.trace.steps.length === 0) {
     return (
-      <div className="card" style={{ borderLeft: '3px solid #374151' }}>
+      <div className="card" style={{ borderLeft: '3px solid var(--text-muted)' }}>
         <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: '1.1rem' }}>&#129504;</span> Agent Reasoning Tree
         </div>
@@ -28,21 +28,21 @@ function AgentReasoningTree({ agentResponse }) {
   };
 
   const stepColor = (type) => {
-    if (type === 'TOOL_CALL') return '#2563eb';
-    if (type === 'DECISION') return '#7c3aed';
-    if (type === 'OBSERVATION') return '#059669';
-    return '#6b7280';
+    if (type === 'TOOL_CALL') return '#2f5f6f';
+    if (type === 'DECISION') return '#5b4a8a';
+    if (type === 'OBSERVATION') return '#2f6f52';
+    return '#9a8f78';
   };
 
   const stepBg = (type) => {
-    if (type === 'TOOL_CALL') return '#eff6ff';
-    if (type === 'DECISION') return '#f5f3ff';
-    if (type === 'OBSERVATION') return '#ecfdf5';
-    return '#f9fafb';
+    if (type === 'TOOL_CALL') return 'var(--blue-bg)';
+    if (type === 'DECISION') return 'var(--purple-bg)';
+    if (type === 'OBSERVATION') return 'var(--green-bg)';
+    return 'var(--gray-bg)';
   };
 
   return (
-    <div className="card" style={{ borderLeft: '3px solid #7c3aed' }}>
+    <div className="card" style={{ borderLeft: '3px solid var(--purple)' }}>
       <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: '1.1rem' }}>&#129504;</span> Agent Reasoning Tree
       </div>
@@ -96,11 +96,11 @@ function AgentReasoningTree({ agentResponse }) {
                   </div>
 
                   {step.tool_name && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#dbeafe', borderRadius: 4, fontSize: '0.78rem', marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600, color: '#2563eb' }}>Tool:</span>
-                      <span style={{ fontFamily: 'monospace', color: '#1e40af' }}>{step.tool_name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--blue-bg)', borderRadius: 4, fontSize: '0.78rem', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--blue)' }}>Tool:</span>
+                      <span style={{ fontFamily: 'monospace', color: 'var(--blue)' }}>{step.tool_name}</span>
                       {step.tool_args && Object.keys(step.tool_args).length > 0 && (
-                        <span style={{ color: '#6b7280', fontFamily: 'monospace', fontSize: '0.72rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.72rem' }}>
                           {JSON.stringify(step.tool_args)}
                         </span>
                       )}
@@ -108,7 +108,7 @@ function AgentReasoningTree({ agentResponse }) {
                   )}
 
                   {step.tool_result && (
-                    <div style={{ padding: '4px 8px', background: '#ecfdf5', borderRadius: 4, fontSize: '0.78rem', color: '#059669', fontFamily: 'monospace', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <div style={{ padding: '4px 8px', background: 'var(--green-bg)', borderRadius: 4, fontSize: '0.78rem', color: 'var(--green)', fontFamily: 'monospace', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       <span style={{ fontWeight: 600 }}>Result: </span>{step.tool_result.substring(0, 300)}
                     </div>
                   )}
@@ -121,10 +121,10 @@ function AgentReasoningTree({ agentResponse }) {
 
       {/* Summary footer */}
       <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--gray-bg)', borderRadius: 'var(--radius)', display: 'flex', gap: 16, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-        <span>&#128257; Iterations: <strong style={{ color: '#2563eb' }}>{agentResponse.trace.iteration_count}</strong></span>
-        <span>&#128295; Tool Calls: <strong style={{ color: '#2563eb' }}>{agentResponse.tool_calls_made}</strong></span>
+        <span>&#128257; Iterations: <strong style={{ color: 'var(--blue)' }}>{agentResponse.trace.iteration_count}</strong></span>
+        <span>&#128295; Tool Calls: <strong style={{ color: 'var(--blue)' }}>{agentResponse.tool_calls_made}</strong></span>
         {agentResponse.trace.self_corrections > 0 && (
-          <span>&#9888;&#65039; Self-Corrections: <strong style={{ color: '#f59e0b' }}>{agentResponse.trace.self_corrections}</strong></span>
+          <span>&#9888;&#65039; Self-Corrections: <strong style={{ color: 'var(--orange)' }}>{agentResponse.trace.self_corrections}</strong></span>
         )}
       </div>
     </div>

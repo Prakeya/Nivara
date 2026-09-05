@@ -43,7 +43,7 @@ function BlindSpotModal({ results, onClose }) {
           </div>
           <button className="btn btn-sm" onClick={onClose}>&times;</button>
         </div>
-        <div style={{ padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 'var(--radius)', border: '1px solid #fecaca', fontSize: '0.8rem', color: 'var(--red)', marginBottom: 12 }}>
+        <div style={{ padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--red)', fontSize: '0.8rem', color: 'var(--red)', marginBottom: 12 }}>
           These settlements appear clean to the deterministic engine but have exceptions in ground truth. They require live LLM investigation or additional business rules to catch.
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
@@ -60,7 +60,7 @@ function BlindSpotModal({ results, onClose }) {
               <tr key={r.settlement_id} style={{ borderBottom: '1px solid var(--border-light)' }}>
                 <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 600 }}>{r.settlement_id}</td>
                 <td style={{ padding: '6px 8px' }}>
-                  <span className="badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+                  <span className="badge" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
                     {r.gt_label === "refund_after_settlement" ? "Refund After Settlement" : "Timing Race"}
                   </span>
                 </td>
@@ -119,10 +119,10 @@ function ReconciliationTrace({ result, onBack, onReview }) {
         <div><span className="t-label">Difference</span> <span className="t-dim"> </span> <span className={result.difference_paise === 0 ? "t-good" : "t-accent"}>{'\u20B9'}{(result.difference_paise / 100).toLocaleString('en-IN')}</span></div>
         <div><span className="t-label">Decision</span>   <span className="t-dim">  </span> <span className={isClean ? "t-good" : "t-accent"}>{result.decision_state}</span></div>
         {result.resolution_status && result.resolution_status !== "OPEN" && (
-          <div><span className="t-label">Resolution</span> <span className="t-dim"> </span> <span style={{color:'#c084fc'}}>{result.resolution_status}</span></div>
+          <div><span className="t-label">Resolution</span> <span className="t-dim"> </span> <span style={{color:'#b9a8e6'}}>{result.resolution_status}</span></div>
         )}
         {result.agent_iterations > 0 && (
-          <div><span className="t-label">Agent Iterations</span> <span className="t-dim"> </span> <span style={{color:'#60a5fa'}}>{result.agent_iterations}</span></div>
+          <div><span className="t-label">Agent Iterations</span> <span className="t-dim"> </span> <span style={{color:'#7fb4c7'}}>{result.agent_iterations}</span></div>
         )}
         <div className="trace-sep">{'\u2500'.repeat(48)}</div>
         {result.deterministic_checks_passed.length > 0 && (
@@ -136,13 +136,13 @@ function ReconciliationTrace({ result, onBack, onReview }) {
       {ai && (
         <div className="ai-section">
           <h4>{result.ai_mode === "demo" ? "Deterministic Demo (Heuristic Classification)" : "Exception Analysis"}</h4>
-          <div className="trace-box" style={{ background: '#1e1b4b' }}>
-            <div><span className="t-label">Classification</span>  <span className="t-dim"> </span> <span style={{color:'#c084fc'}}>{ai.classification}</span></div>
-            <div><span className="t-label">Confidence</span>     <span className="t-dim">    </span> <span style={{color:'#c084fc'}}>{result.ai_mode === "demo" ? "Heuristic" : `${(ai.raw_confidence * 100).toFixed(0)}%`}</span></div>
-            <div><span className="t-label">Action</span>         <span className="t-dim">       </span> <span style={{color:'#fbbf24'}}>{ai.recommended_action}</span></div>
+          <div className="trace-box" style={{ background: 'var(--ink)' }}>
+            <div><span className="t-label">Classification</span>  <span className="t-dim"> </span> <span style={{color:'#b9a8e6'}}>{ai.classification}</span></div>
+            <div><span className="t-label">Confidence</span>     <span className="t-dim">    </span> <span style={{color:'#b9a8e6'}}>{result.ai_mode === "demo" ? "Heuristic" : `${(ai.raw_confidence * 100).toFixed(0)}%`}</span></div>
+            <div><span className="t-label">Action</span>         <span className="t-dim">       </span> <span style={{color:'var(--primary)'}}>{ai.recommended_action}</span></div>
             <div className="trace-sep">{'\u2500'.repeat(48)}</div>
             <div><span className="t-label">Explanation</span></div>
-            <div style={{color:'#e2e8f0', marginTop: 4}}>{ai.explanation}</div>
+            <div style={{color:'#ede6d6', marginTop: 4}}>{ai.explanation}</div>
             {ai.cited_evidence.length > 0 && (
               <div style={{marginTop: 8}}><span className="t-label">Evidence</span> <span className="t-good">{ai.cited_evidence.join(', ')}</span></div>
             )}
@@ -151,7 +151,7 @@ function ReconciliationTrace({ result, onBack, onReview }) {
       )}
 
       {!ai && (
-        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', border: '1px solid #bbf7d0', fontSize: '0.85rem', color: 'var(--green)' }}>
+        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--green)', fontSize: '0.85rem', color: 'var(--green)' }}>
           <strong>Deterministic rules completely explain this settlement.</strong> No exception analysis needed.
         </div>
       )}
@@ -160,37 +160,37 @@ function ReconciliationTrace({ result, onBack, onReview }) {
       {agent && agent.trace && agent.trace.steps && agent.trace.steps.length > 0 && (
         <div className="ai-section" style={{ marginTop: 16 }}>
           <h4>Agent Reasoning Trace</h4>
-          <div className="trace-box" style={{ background: '#0f172a' }}>
+          <div className="trace-box" style={{ background: 'var(--ink)' }}>
             {agent.trace.steps.map((step, idx) => (
-              <div key={idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: idx < agent.trace.steps.length - 1 ? '1px solid #1e293b' : 'none' }}>
+              <div key={idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: idx < agent.trace.steps.length - 1 ? '1px solid rgba(216,199,166,0.14)' : 'none' }}>
                 <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 4}}>
                   <span className="badge" style={{
-                    background: step.action_type === 'TOOL_CALL' ? '#1e40af' : step.action_type === 'DECISION' ? '#7c3aed' : '#374151',
+                    background: step.action_type === 'TOOL_CALL' ? 'var(--blue)' : step.action_type === 'DECISION' ? 'var(--purple)' : '#4a4335',
                     color: '#fff', fontSize: '0.7rem', padding: '2px 6px'
                   }}>{step.action_type}</span>
-                  <span style={{color:'#94a3b8', fontSize: '0.75rem'}}>Step {step.step_number}</span>
+                  <span style={{color:'#b8ae98', fontSize: '0.75rem'}}>Step {step.step_number}</span>
                 </div>
-                <div style={{color:'#e2e8f0', fontSize: '0.85rem'}}>{step.thought}</div>
+                <div style={{color:'#ede6d6', fontSize: '0.85rem'}}>{step.thought}</div>
                 {step.tool_name && (
-                  <div style={{color:'#60a5fa', fontSize: '0.8rem', marginTop: 2}}>
+                  <div style={{color:'#7fb4c7', fontSize: '0.8rem', marginTop: 2}}>
                     Tool: {step.tool_name}
                     {step.tool_args && Object.keys(step.tool_args).length > 0 && (
-                      <span style={{color:'#94a3b8'}}> ({JSON.stringify(step.tool_args)})</span>
+                      <span style={{color:'#b8ae98'}}> ({JSON.stringify(step.tool_args)})</span>
                     )}
                   </div>
                 )}
                 {step.tool_result && (
-                  <div style={{color:'#4ade80', fontSize: '0.8rem', marginTop: 2}}>
+                  <div style={{color:'#6fbd97', fontSize: '0.8rem', marginTop: 2}}>
                     Result: {step.tool_result.substring(0, 200)}
                   </div>
                 )}
               </div>
             ))}
             <div className="trace-sep">{'\u2500'.repeat(48)}</div>
-            <div><span className="t-label">Total Iterations</span> <span className="t-dim"> </span> <span style={{color:'#60a5fa'}}>{agent.trace.iteration_count}</span></div>
-            <div><span className="t-label">Tool Calls</span> <span className="t-dim">      </span> <span style={{color:'#60a5fa'}}>{agent.tool_calls_made}</span></div>
+            <div><span className="t-label">Total Iterations</span> <span className="t-dim"> </span> <span style={{color:'#7fb4c7'}}>{agent.trace.iteration_count}</span></div>
+            <div><span className="t-label">Tool Calls</span> <span className="t-dim">      </span> <span style={{color:'#7fb4c7'}}>{agent.tool_calls_made}</span></div>
             {agent.trace.self_corrections > 0 && (
-              <div><span className="t-label">Self-Corrections</span> <span className="t-dim"> </span> <span style={{color:'#fbbf24'}}>{agent.trace.self_corrections}</span></div>
+              <div><span className="t-label">Self-Corrections</span> <span className="t-dim"> </span> <span style={{color:'var(--primary)'}}>{agent.trace.self_corrections}</span></div>
             )}
           </div>
         </div>
@@ -198,20 +198,20 @@ function ReconciliationTrace({ result, onBack, onReview }) {
 
       {/* Human Review Action */}
       {result.escalate_to_human && result.decision_state !== "CLEAN_MATCH" && onReview && (
-        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid #fde68a' }}>
+        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--orange-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--orange)' }}>
           <div style={{ fontSize: '0.85rem', color: 'var(--orange)', marginBottom: 8, fontWeight: 600 }}>Human Review Required</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn" style={{background: '#16a34a', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'APPROVE')}>Approve</button>
-            <button className="btn" style={{background: '#dc2626', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'REJECT')}>Reject</button>
+            <button className="btn" style={{background: 'var(--green)', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'APPROVE')}>Approve</button>
+            <button className="btn" style={{background: 'var(--red)', color: '#fff'}} onClick={() => onReview(result.settlement_id, 'REJECT')}>Reject</button>
           </div>
         </div>
       )}
 
       {result.human_review && (
-        <div style={{ marginTop: 16, padding: '12px 16px', background: '#f0fdf4', borderRadius: 'var(--radius)', border: '1px solid #bbf7d0', fontSize: '0.85rem' }}>
-          <div style={{ fontWeight: 600, color: '#166534', marginBottom: 4 }}>Human Decision: {result.human_review.decision}</div>
-          <div style={{ color: '#166534' }}>Reason: {result.human_review.reason}</div>
-          <div style={{ color: '#6b7280', fontSize: '0.8rem' }}>Reviewer: {result.human_review.reviewer_id}</div>
+        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', border: '1px solid var(--green)', fontSize: '0.85rem' }}>
+          <div style={{ fontWeight: 600, color: 'var(--green)', marginBottom: 4 }}>Human Decision: {result.human_review.decision}</div>
+          <div style={{ color: 'var(--green)' }}>Reason: {result.human_review.reason}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Reviewer: {result.human_review.reviewer_id}</div>
         </div>
       )}
     </div>
@@ -372,11 +372,11 @@ function App() {
       )}
 
       {status && status.ai_mode === "demo" && !bannerDismissed && (
-        <div style={{background:'#fef3c7', borderBottom:'1px solid #fcd34d', padding:'8px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.85rem', color:'#92400e'}}>
+        <div style={{background:'var(--orange-bg)', borderBottom:'1px solid var(--orange)', padding:'8px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.85rem', color:'var(--orange)'}}>
           <span>
-            <strong>Deterministic Demo Mode</strong> &mdash; heuristic AI classifications. Set <code style={{background:'#fde68a', padding:'1px 4px', borderRadius:3}}>GROQ_API_KEY</code> environment variable for live LLM investigation.
+            <strong>Deterministic Demo Mode</strong> &mdash; heuristic AI classifications. Set <code style={{background:'var(--gray-bg)', padding:'1px 4px', borderRadius:3}}>GROQ_API_KEY</code> environment variable for live LLM investigation.
           </span>
-          <button onClick={() => setBannerDismissed(true)} style={{background:'none', border:'none', color:'#92400e', cursor:'pointer', fontSize:'1.1rem', padding:'0 4px'}}>&times;</button>
+          <button onClick={() => setBannerDismissed(true)} style={{background:'none', border:'none', color:'var(--orange)', cursor:'pointer', fontSize:'1.1rem', padding:'0 4px'}}>&times;</button>
         </div>
       )}
 
