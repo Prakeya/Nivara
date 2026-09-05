@@ -58,7 +58,7 @@ function SettlementSimulator({ results, streamedIds, onStreamedIdsChange }) {
   const streamedCount = streamedIds.size;
 
   return (
-    <div className="card" style={{ borderLeft: '3px solid #7c3aed' }}>
+    <div className="card" style={{ borderLeft: '3px solid var(--purple)' }}>
       <div className="flex-between" style={{ marginBottom: 12 }}>
         <div>
           <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -87,7 +87,7 @@ function SettlementSimulator({ results, streamedIds, onStreamedIdsChange }) {
             <span>{progress.toFixed(0)}%</span>
           </div>
           <div style={{ width: '100%', height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
-            <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, #7c3aed, #2563eb)', borderRadius: 3, transition: 'width 0.15s ease' }} />
+            <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--purple), var(--blue))', borderRadius: 3, transition: 'width 0.15s ease' }} />
           </div>
         </>
       )}
@@ -99,7 +99,7 @@ function SettlementSimulator({ results, streamedIds, onStreamedIdsChange }) {
       )}
 
       {running === false && streamedCount === total && total > 0 && (
-        <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', fontSize: '0.8rem', color: 'var(--green)', border: '1px solid #bbf7d0' }}>
+        <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--green-bg)', borderRadius: 'var(--radius)', fontSize: '0.8rem', color: 'var(--green)', border: '1px solid var(--green)' }}>
           &#10003; Simulation complete &mdash; {total} settlements streamed
         </div>
       )}

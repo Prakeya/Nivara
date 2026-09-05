@@ -69,17 +69,17 @@ function SettlementRiskRadar({ result }) {
   }, [dims]);
 
   const riskLevel = (v) => {
-    if (v < 0.3) return { color: '#4ade80', label: 'Low' };
-    if (v < 0.6) return { color: '#fbbf24', label: 'Medium' };
-    if (v < 0.8) return { color: '#f97316', label: 'High' };
-    return { color: '#ef4444', label: 'Critical' };
+    if (v < 0.3) return { color: '#2f6f52', label: 'Low' };
+    if (v < 0.6) return { color: '#a16a1f', label: 'Medium' };
+    if (v < 0.8) return { color: '#b8532a', label: 'High' };
+    return { color: '#9c3b32', label: 'Critical' };
   };
 
   const overallRisk = dims.reduce((s, d) => s + d.value, 0) / dims.length;
   const overall = riskLevel(overallRisk);
 
   return (
-    <div className="card" style={{ borderLeft: '3px solid #ef4444' }}>
+    <div className="card" style={{ borderLeft: '3px solid #9c3b32' }}>
       <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: '1.1rem' }}>&#127919;</span> Settlement Risk Radar
       </div>
@@ -110,7 +110,7 @@ function SettlementRiskRadar({ result }) {
             strokeWidth="2"
           />
           {dataPolygon.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="4" fill={overall.color} stroke="#fff" strokeWidth="2" />
+            <circle key={i} cx={p.x} cy={p.y} r="4" fill={overall.color} stroke="#fff8ee" strokeWidth="2" />
           ))}
           {dims.map((d, i) => {
             const labelPos = polarToXY(d.angle, maxR + 22);
