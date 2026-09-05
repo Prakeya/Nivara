@@ -1,3 +1,4 @@
+import React from 'react';
 function UploadPanel({ onUploadComplete, loading }) {
   const [files, setFiles] = React.useState({ transactions: null, settlements: null, refunds: null, bank_credits: null });
   const [uploading, setUploading] = React.useState(false);
@@ -200,4 +201,5 @@ function UploadPanel({ onUploadComplete, loading }) {
   );
 }
 
-window.UploadPanel = UploadPanel;
+
+export default UploadPanel;
