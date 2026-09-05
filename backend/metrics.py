@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[import-not-found]
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[import-not-found,unused-ignore]
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -153,11 +153,17 @@ if PROMETHEUS_AVAILABLE:
 
     def get_metrics() -> bytes:
         if PROMETHEUS_REGISTRY is not None:
-            return cast(bytes, generate_latest(PROMETHEUS_REGISTRY))
-        return cast(bytes, generate_latest())
+            result = generate_latest(PROMETHEUS_REGISTRY)
+        else:
+            result = generate_latest()
+        if not isinstance(result, bytes):
+            raise TypeError("Prometheus metrics output must be bytes")
+        return result
 
     def get_content_type() -> str:
-        return cast(str, CONTENT_TYPE_LATEST)
+        if not isinstance(CONTENT_TYPE_LATEST, str):
+            raise TypeError("Prometheus content type must be a string")
+        return CONTENT_TYPE_LATEST
 else:
     # Stub functions when prometheus_client is not installed
     def record_settlement(decision_state: str, latency_seconds: float) -> None: pass
