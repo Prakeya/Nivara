@@ -24,7 +24,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 logger = logging.getLogger("nivara.mcp_client")
 
@@ -148,7 +148,11 @@ class RazorpayMCPClient:
                 timeout=30.0,
             )
             response.raise_for_status()
-            return response.json().get("items", [])
+            payload = cast(dict[str, Any], response.json())
+            raw_items = payload.get("items", [])
+            if not isinstance(raw_items, list):
+                return []
+            return [cast(dict[str, Any], item) for item in raw_items if isinstance(item, dict)]
         except Exception as exc:
             raise RuntimeError(f"Razorpay {resource} API error: {exc}") from exc
 

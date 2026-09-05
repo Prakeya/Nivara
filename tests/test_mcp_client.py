@@ -1,5 +1,7 @@
 """Tests for Razorpay MCP Client."""
 
+from unittest.mock import MagicMock, patch
+
 from backend.mcp_client import RazorpayMCPClient, MCPSettlement
 
 
@@ -61,3 +63,13 @@ class TestMCPClient:
         import pytest
         with pytest.raises(RuntimeError, match="not configured"):
             client.fetch_settlements()
+
+    def test_fetch_items_ignores_non_dict_entries(self):
+        client = RazorpayMCPClient("key", "secret")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"items": [{"id": "pay_1"}, "bad", 1, {"id": "pay_2"}]}
+
+        with patch("httpx.get", return_value=mock_response):
+            items = client.fetch_payments()
+
+        assert items == [{"id": "pay_1"}, {"id": "pay_2"}]
