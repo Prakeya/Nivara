@@ -35,7 +35,7 @@ def redact_dict(data: dict[str, Any], fields: set[str] | None = None) -> dict[st
     """Redact PII from specific fields in a dictionary."""
     if fields is None:
         fields = {"reason", "explanation", "reviewer_id", "notes"}
-    result = {}
+    result: dict[str, Any] = {}
     for key, value in data.items():
         if key in fields and isinstance(value, str):
             result[key] = redact_pii(value)
