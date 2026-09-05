@@ -1,3 +1,4 @@
+import React from 'react';
 function SettlementRiskRadar({ result }) {
   if (!result) return null;
 
@@ -141,4 +142,5 @@ function SettlementRiskRadar({ result }) {
   );
 }
 
-window.SettlementRiskRadar = SettlementRiskRadar;
+
+export default SettlementRiskRadar;

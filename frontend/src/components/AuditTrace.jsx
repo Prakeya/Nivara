@@ -1,3 +1,4 @@
+import React from 'react';
 function AuditTrace({ auditRecords, uploadHash }) {
   const [expanded, setExpanded] = React.useState(null);
   const [verifyResult, setVerifyResult] = React.useState(null);
@@ -118,4 +119,5 @@ function AuditTrace({ auditRecords, uploadHash }) {
   );
 }
 
-window.AuditTrace = AuditTrace;
+
+export default AuditTrace;

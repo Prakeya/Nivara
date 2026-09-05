@@ -1,3 +1,4 @@
+import React from 'react';
 function HeroMetrics({ status, onBlindSpotClick }) {
   if (!status) return null;
   const total = status.total_settlements;
@@ -195,5 +196,6 @@ function ResultsTable({ results, selectedId, onSelect, streamedIds }) {
   );
 }
 
-window.HeroMetrics = HeroMetrics;
-window.ResultsTable = ResultsTable;
+
+export { HeroMetrics };
+export default ResultsTable;

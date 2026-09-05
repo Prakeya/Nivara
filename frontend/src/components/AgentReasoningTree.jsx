@@ -1,3 +1,4 @@
+import React from 'react';
 function AgentReasoningTree({ agentResponse }) {
   const [expandedSteps, setExpandedSteps] = React.useState({});
   const [expandedThoughts, setExpandedThoughts] = React.useState({});
@@ -130,4 +131,5 @@ function AgentReasoningTree({ agentResponse }) {
   );
 }
 
-window.AgentReasoningTree = AgentReasoningTree;
+
+export default AgentReasoningTree;

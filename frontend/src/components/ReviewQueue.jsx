@@ -1,3 +1,4 @@
+import React from 'react';
 function ReviewQueue({ results, onSelect, onReview }) {
   const queue = results.filter(r => r.escalate_to_human);
 
@@ -91,4 +92,5 @@ function ReviewQueue({ results, onSelect, onReview }) {
   );
 }
 
-window.ReviewQueue = ReviewQueue;
+
+export default ReviewQueue;

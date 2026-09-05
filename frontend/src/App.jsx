@@ -2,6 +2,16 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import MetricsDashboard from './components/MetricsDashboard.jsx'
+import UploadPanel from './components/UploadPanel.jsx'
+import ResultsTable, { HeroMetrics } from './components/ResultsTable.jsx'
+import CashFlowImpact from './components/CashFlowImpact.jsx'
+import SettlementSimulator from './components/SettlementSimulator.jsx'
+import AgentReasoningTree from './components/AgentReasoningTree.jsx'
+import SettlementRiskRadar from './components/SettlementRiskRadar.jsx'
+import CrossSourceLinker from './components/CrossSourceLinker.jsx'
+import ReviewQueue from './components/ReviewQueue.jsx'
+import BatchPatterns from './components/BatchPatterns.jsx'
+import AuditTrace from './components/AuditTrace.jsx'
 const { useState, useCallback, useEffect, useRef } = React;
 
 const API = "";
