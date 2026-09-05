@@ -636,7 +636,7 @@ class TestInvestigateV2GroqPath:
             ),
         )
 
-    def _success_result(self, model_name: str = "llama-3.1-8b-instant"):
+    def _success_result(self, model_name: str = "groq/compound-mini"):
         from backend.fallback_chain import FallbackResult
         return FallbackResult(
             provider="groq",
@@ -664,9 +664,9 @@ class TestInvestigateV2GroqPath:
 
         assert ai is not None
         mock_fb.assert_called_once()
-        assert mock_fb.call_args.kwargs["primary_model"] == "llama-3.1-8b-instant"
+        assert mock_fb.call_args.kwargs["primary_model"] == "groq/compound-mini"
         assert ai.provider_name == "groq"
-        assert ai.model_name == "llama-3.1-8b-instant"
+        assert ai.model_name == "groq/compound-mini"
         assert ai.classification == AIClassification.TIMING_MISMATCH
         assert ai.latency_ms == 83
         assert ai.cost_inr == 0.0

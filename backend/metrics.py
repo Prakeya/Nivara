@@ -186,6 +186,17 @@ _groq_lock = threading.Lock()
 _groq_daily_used: dict[str, int] = {}
 
 
+def reset_in_memory_metrics() -> None:
+    """Reset dashboard trackers so tests can start from a deterministic state."""
+    global _llm_calls, _llm_errors, _llm_latency_ms
+    with _llm_lock:
+        _llm_calls = 0
+        _llm_errors = 0
+        _llm_latency_ms = 0.0
+    with _groq_lock:
+        _groq_daily_used.clear()
+
+
 def record_llm_call_metric(status: str, latency_ms: float) -> None:
     """Record an LLM call outcome for the in-memory dashboard metrics."""
     global _llm_calls, _llm_errors, _llm_latency_ms

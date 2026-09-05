@@ -18,6 +18,7 @@ from backend.metrics import (
     groq_daily_usage_snapshot,
     record_llm_call_metric,
     llm_metrics_snapshot,
+    reset_in_memory_metrics,
 )
 
 client = TestClient(app)
@@ -41,6 +42,7 @@ def _csv_bytes(rows: list[dict]) -> bytes:
 class TestMetricsEndpoint:
     def setup_method(self):
         _jobs.clear()
+        reset_in_memory_metrics()
 
     def test_empty_state_schema(self):
         response = client.get("/api/metrics")

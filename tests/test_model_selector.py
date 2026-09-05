@@ -59,7 +59,7 @@ class TestSelectModel:
 
     def test_simple_uses_fallback_model(self) -> None:
         assert MODEL_FOR_COMPLEXITY[COMPLEXITY_SIMPLE] == FALLBACK_MODEL
-        assert FALLBACK_MODEL == "llama-3.1-8b-instant"
+        assert FALLBACK_MODEL == "groq/compound-mini"
 
     def test_complex_uses_default_model(self) -> None:
         assert MODEL_FOR_COMPLEXITY[COMPLEXITY_COMPLEX] == DEFAULT_MODEL

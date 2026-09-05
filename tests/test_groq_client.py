@@ -273,7 +273,7 @@ class TestGroqClient:
         mock_get_client.assert_not_called()
 
     def test_fallback_model_constant(self) -> None:
-        assert FALLBACK_MODEL == "llama-3.1-8b-instant"
+        assert FALLBACK_MODEL == "groq/compound-mini"
 
 
 # ---------------------------------------------------------------------------
