@@ -88,7 +88,11 @@ DeterministicGuard, AIValidator, and ModelSelector are fully wired into the `/up
 
 ## Data and Persistence
 
-The active audit path is SQLite at `data/audit/audit.db`, and jobs are held in the process-local `_jobs` store. `backend/database.py` contains a separate optional PostgreSQL abstraction selected by `NIVARA_DATABASE_URL`; it is not currently used by `AuditLogger`. Redis/Celery support is present in optional task code but is not used by the synchronous upload handler.
+The active audit path is SQLite at `data/audit/audit.db`, and jobs are held in the process-local job store (`backend/job_store.py`). `backend/database.py` contains a separate PostgreSQL abstraction selected by `NIVARA_DATABASE_URL`, used only by the deep health check (`backend/health.py`); `AuditLogger` does not use it. There is no async task queue — all processing is synchronous within the request handler.
+
+## Backend Module Layout
+
+`backend/main.py` is app wiring only (FastAPI instance, middleware, startup checks, router mounting). Route handlers live in `backend/routes/` — `upload.py`, `status.py`, `audit.py`, `review.py`, `razorpay.py`, `metrics.py`, `health.py`, `v1.py` (versioned sub-API), `frontend.py` (static/SPA serving). Shared state lives in `backend/job_store.py` (dependency-free); shared response computation lives in `backend/response_shaping.py` and `backend/api_helpers.py`.
 
 ## Scope
 

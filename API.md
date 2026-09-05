@@ -163,3 +163,5 @@ The deep health response reports overall status and database, LLM, and disk chec
 ## Environment
 
 See `.env.example`. `GROQ_API_KEY` is required at application startup. Razorpay keys enable live import. `NIVARA_API_KEY` enables RBAC; `NIVARA_DATABASE_URL` selects the optional database abstraction branch.
+
+**Security:** if `NIVARA_API_KEY` is left unset, every caller is treated as `Role.ADMIN` — do not deploy without setting it.
