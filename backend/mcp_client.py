@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nivara.mcp_client")
 
 
 @dataclass
