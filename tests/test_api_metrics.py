@@ -83,8 +83,8 @@ class TestMetricsEndpoint:
 class TestMetricTrackers:
     def test_groq_usage_accumulates(self):
         before = groq_daily_usage_snapshot()
-        record_groq_usage(1000, "llama-3.1-70b-versatile")
-        record_groq_usage(500, "llama-3.1-70b-versatile")
+        record_groq_usage(1000, "openai/gpt-oss-20b")
+        record_groq_usage(500, "openai/gpt-oss-20b")
         after = groq_daily_usage_snapshot()
         assert after["used_tokens"] - before["used_tokens"] == 1500
         assert after["remaining_tokens"] == max(0, after["daily_limit"] - after["used_tokens"])

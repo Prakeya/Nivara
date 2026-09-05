@@ -63,7 +63,7 @@ class TestSelectModel:
 
     def test_complex_uses_default_model(self) -> None:
         assert MODEL_FOR_COMPLEXITY[COMPLEXITY_COMPLEX] == DEFAULT_MODEL
-        assert DEFAULT_MODEL == "llama-3.1-70b-versatile"
+        assert DEFAULT_MODEL == "openai/gpt-oss-20b"
 
     def test_select_2_type_packet(self) -> None:
         packet = EvidencePacketV2.model_construct(
