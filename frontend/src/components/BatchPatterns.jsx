@@ -1,3 +1,4 @@
+import React from 'react';
 function BatchPatterns({ patterns }) {
   if (!patterns || patterns.length === 0) return (
     <div className="card">
@@ -59,4 +60,5 @@ function BatchPatterns({ patterns }) {
   );
 }
 
-window.BatchPatterns = BatchPatterns;
+
+export default BatchPatterns;
