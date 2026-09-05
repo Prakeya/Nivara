@@ -9,7 +9,6 @@
 
 **Track 04 — AI Finance Controller** · Razorpay Buildathon 2026
 
-[Demo Video](https://drive.google.com/drive/folders/1s3RJJDZQJffwuXuZOAozX4jyxttwLKLP?usp=sharing) · [Repo](https://github.com/Prakeya/Nivara/tree/main)
 
 ---
 
@@ -289,7 +288,6 @@ pytest --cov=backend --cov-report=term -q
 
 ## Demo
 
-**[Watch the demo →](https://drive.google.com/drive/folders/1s3RJJDZQJffwuXuZOAozX4jyxttwLKLP?usp=sharing)**
 
 | [![Upload flow](https://drive.google.com/thumbnail?id=10I02TWGESUp7Hxkowie0k_5rxsdy_i8g&sz=w1000)](https://drive.google.com/file/d/10I02TWGESUp7Hxkowie0k_5rxsdy_i8g/view?usp=sharing) | [![Dashboard / results](https://drive.google.com/thumbnail?id=1DOOKQri_9DILnuOVG0GL3BGMRL_OnxRu&sz=w1000)](https://drive.google.com/file/d/1DOOKQri_9DILnuOVG0GL3BGMRL_OnxRu/view?usp=sharing) |
 |:---:|:---:|
