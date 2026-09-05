@@ -131,6 +131,32 @@ class RazorpayMCPClient:
 
         return settlements
 
+    def _fetch_items(self, resource: str, count: int = 100) -> list[dict[str, Any]]:
+        """Fetch a read-only Razorpay collection used for reconciliation."""
+        if not self.is_available():
+            raise RuntimeError("Razorpay MCP client not configured")
+        try:
+            import httpx
+            response = httpx.get(
+                f"{self._base_url}/{resource}",
+                auth=(self._api_key, self._api_secret),
+                params={"count": count},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json().get("items", [])
+        except Exception as exc:
+            raise RuntimeError(f"Razorpay {resource} API error: {exc}") from exc
+
+    def fetch_payments(self, count: int = 100) -> list[dict[str, Any]]:
+        return self._fetch_items("payments", count)
+
+    def fetch_refunds(self, count: int = 100) -> list[dict[str, Any]]:
+        return self._fetch_items("refunds", count)
+
+    def fetch_transfers(self, count: int = 100) -> list[dict[str, Any]]:
+        return self._fetch_items("transfers", count)
+
     def to_csv_rows(self, settlements: list[MCPSettlement]) -> list[dict[str, Any]]:
         """Convert MCP settlements to CSV-compatible dicts for ingestion."""
         return [

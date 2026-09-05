@@ -2,59 +2,32 @@
 
 Base URL: `http://localhost:8000`
 
-## Authentication
+## Authentication and Roles
 
-Optional. If the server is started with `NIVARA_API_KEY` set, every request must
-include the header:
+With no `NIVARA_API_KEY`, demo access is open. When it is set, send `X-API-Key`. Role mappings use `NIVARA_ROLE_<key>=admin|reviewer|viewer`.
 
-```
-X-API-Key: <NIVARA_API_KEY>
-```
+| Method | Path | Auth permission | Description |
+|---|---|---|---|
+| POST | `/upload` | upload | Process four CSVs; return an audit-backed cached job for duplicate completed uploads |
+| GET | `/status/{job_id}` | none | Read job results |
+| GET | `/audit/{upload_hash}` | none | Read batch audit records |
+| GET | `/audit/{upload_hash}/verify` | none | Verify SHA-256 audit chain |
+| GET | `/settlement/{settlement_id}` | none | Read settlement history |
+| POST | `/api/review/{settlement_id}/decision` | review | Submit human review decision |
+| GET | `/api/review/pending` | read | List pending reviews |
+| GET | `/api/review/{settlement_id}` | none | Read review status |
+| POST | `/api/fetch-razorpay` | API key check | Fetch settlement rows only |
+| POST | `/api/reconcile-razorpay` | API key check | Fetch Razorpay data and run reconciliation |
+| GET | `/api/metrics` | configure | Read JSON metrics |
+| GET | `/metrics` | none | Prometheus exposition when installed |
+| GET | `/health` | none | Deep health check |
 
-Unset means open access (default for the hackathon demo).
+## UploadRequest and UploadResponse
 
-## Error Encoding
-
-| Status | Meaning |
-|---|---|
-| `400` | Invalid CSV payload |
-| `404` | Unknown job / settlement |
-| `422` | Batch rejected: exceeds Groq free-tier daily token budget |
-| `429` | Per-IP rate limit exceeded |
-| `503` | Server unhealthy (LLM/DB/disk check failed) |
-
----
-
-## Startup
-
-```bash
-# Fail-fast: requires GROQ_API_KEY (deterministic engine runs without it,
-# but AI investigation is disabled)
-GROQ_API_KEY=... PYTHONPATH="." uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
-
----
-
-## Endpoints
-
-### `GET /health`
-
-Deep health check: DB, LLM, disk.
+`POST /upload` is multipart form data with required fields `transactions`, `settlements`, `refunds`, and `bank_credits`. Each field is a CSV file.
 
 ```bash
-curl -s http://localhost:8000/health
-```
-
-```json
-{ "status": "ok", "version": "0.1.0" }
-```
-
-### `POST /upload`
-
-Accepts the four CSVs as multipart form fields.
-
-```bash
-curl -s -X POST http://localhost:8000/upload \
+curl -X POST http://localhost:8000/upload \
   -F transactions=@data/demo/transactions.csv \
   -F settlements=@data/demo/settlements.csv \
   -F refunds=@data/demo/refunds.csv \
@@ -63,184 +36,130 @@ curl -s -X POST http://localhost:8000/upload \
 
 ```json
 {
-  "job_id": "3f2a1c...",
-  "upload_hash": "a1b2c3...",
-  "status": "processing",
-  "total_settlements": 80
+  "job_id": "uuid-or-cached-job-id",
+  "upload_hash": "sha256",
+  "status": "completed",
+  "message": "Batch already processed. Returning cached results."
 }
 ```
 
-Returns `422` if the batch would exceed the Groq free-tier daily token budget,
-and `429` if the client is rate-limited.
+A first completed upload returns HTTP 202 without the cache message. Invalid files return 4xx; rate limits return 429. The full result is available from `/status/{job_id}`.
 
-### `POST /api/fetch-razorpay`
-
-Fetch settlements live from Razorpay API. Requires `RAZORPAY_API_KEY` and
-`RAZORPAY_API_SECRET` environment variables.
+## Status
 
 ```bash
-curl -s -X POST http://localhost:8000/api/fetch-razorpay \
-  -H "Content-Type: application/json" \
-  -d '{"from_date": "2026-08-01", "to_date": "2026-08-31", "count": 50}'
+curl http://localhost:8000/status/<job_id>
 ```
+
+The completed response contains `total_settlements`, `clean_matches`, `exceptions`, `unresolved`, `math_discrepancies`, `match_rate`, `results`, `batch_analysis`, and `audit_records`.
+
+## RazorpayFetchRequest
+
+Both Razorpay POST endpoints accept JSON:
 
 ```json
 {
-  "status": "fetched",
+  "from_date": "2026-08-01",
+  "to_date": "2026-08-31",
   "count": 50,
-  "settlements": [
-    {
-      "settlement_id": "setl_123",
-      "amount": 100000,
-      "status": "settled",
-      "utr": "UTR123456",
-      "created_at": "2026-08-30T10:00:00Z",
-      "settled_at": "2026-08-31T10:00:00Z",
-      "linked_payment_ids": "['pay_1', 'pay_2']",
-      "linked_refund_ids": "[]"
-    }
-  ],
-  "message": "Fetched 50 settlements from Razorpay. POST these to /upload to run reconciliation."
+  "days": 7
 }
 ```
 
-Returns `503` if Razorpay credentials are not configured.
-Returns `502` if the Razorpay API call fails.
+`from_date` and `to_date` are optional ISO dates. `count` defaults to 100. `days` is used by `/api/reconcile-razorpay` when `from_date` is omitted. Razorpay credentials are `RAZORPAY_API_KEY` and `RAZORPAY_API_SECRET`.
 
-### `GET /status/{job_id}`
-
-Full dashboard payload: hero metrics, results table, review queue, batch
-patterns, and audit records.
+`POST /api/fetch-razorpay` returns fetched settlement CSV-shaped rows and does not run the engine:
 
 ```bash
-curl -s http://localhost:8000/status/3f2a1c...
+curl -X POST http://localhost:8000/api/fetch-razorpay \
+  -H 'Content-Type: application/json' \
+  -d '{"days":7,"count":50}'
 ```
 
-### `GET /audit/{upload_hash}`
-
-Append-only audit records for a batch.
+`POST /api/reconcile-razorpay` fetches settlements, payments, refunds, and transfers. When sandbox linkage is incomplete, it derives a payment and bank credit from each settlement before running the engine:
 
 ```bash
-curl -s http://localhost:8000/audit/a1b2c3...
-```
-
-### `GET /audit/{upload_hash}/verify`
-
-Verify the SHA-256 hash chain; tampering yields `"valid": false`.
-
-```bash
-curl -s http://localhost:8000/audit/a1b2c3.../verify
-```
-
-```json
-{ "valid": true, "total_records": 80, "broken_at": null }
-```
-
-### `GET /settlement/{settlement_id}`
-
-Full audit history + decision for one settlement.
-
-```bash
-curl -s http://localhost:8000/settlement/SETL_0042
-```
-
-### `GET /api/review/pending`
-
-Settlements queued for human review.
-
-```bash
-curl -s http://localhost:8000/api/review/pending
-```
-
-```json
-{ "total_pending": 27, "settlements": [ { "settlement_id": "SETL_0042", "decision_state": "MATH_DISCREPANCY", "ai_classification": "UNEXPLAINED", "...": "..." } ] }
-```
-
-### `POST /api/review/{settlement_id}/decision`
-
-Submit a human review decision (`APPROVE` | `REJECT`).
-
-```bash
-curl -s -X POST http://localhost:8000/api/review/SETL_0042/decision \
-  -H "Content-Type: application/json" \
-  -d '{"decision": "APPROVE", "reason": "Matches bank statement", "reviewer_id": "ops_team"}'
-```
-
-```json
-{ "settlement_id": "SETL_0042", "decision": "APPROVE", "reason": "Matches bank statement", "reviewer_id": "ops_team", "timestamp": "2026-08-30T...", "status": "accepted" }
-```
-
-### `GET /api/metrics`
-
-JSON metrics for the Metrics Dashboard (decision breakdown pie chart, Groq
-free-tier quota progress, LLM latency/errors, cost).
-
-```bash
-curl -s http://localhost:8000/api/metrics
+curl -X POST http://localhost:8000/api/reconcile-razorpay \
+  -H 'Content-Type: application/json' \
+  -d '{"from_date":"2026-08-01","to_date":"2026-08-31","count":50}'
 ```
 
 ```json
 {
-  "generated_at": "2026-08-30T...",
-  "active_ai": true,
-  "batches_processed": 1,
-  "settlements_processed": 80,
-  "error_rate": 0.0,
-  "avg_match_rate": 0.875,
-  "decision_breakdown": { "clean": 26, "exceptions": 27, "math_discrepancy": 27, "unresolved": 0 },
-  "ai_investigations_total": 27,
-  "ai_auto_approved_total": 0,
-  "llm": { "total_calls": 27, "errors": 0, "avg_latency_ms": 482.1, "error_rate": 0.0 },
-  "groq_free_tier": { "daily_limit": 1000000, "used_tokens": 12150, "remaining_tokens": 987850, "pct_used": 1.22, "by_model": { "llama-3.1-70b-versatile": 12150 } },
-  "estimated_cost_inr": 0.0
+  "status": "completed",
+  "job_id": "abc123",
+  "total_settlements": 50,
+  "clean_matches": 40,
+  "exceptions": 10,
+  "unresolved": 0,
+  "match_rate": 80.0
 }
 ```
 
-### `GET /metrics`
+## ReviewDecision
 
-Prometheus exposition format (settlements, latency, LLM calls, upload errors,
-audit decisions). Available when `prometheus_client` is installed.
-
-```bash
-curl -s http://localhost:8000/metrics
-```
-
----
-
-## Versioned API (`/v1`)
-
-| Endpoint | Description |
-|---|---|
-| `GET /v1/health` | Alias of `/health` |
-| `GET /v1/prompts` | List registered prompt versions |
-| `GET /v1/jobs?page=1&page_size=50` | Paginated job list |
-| `GET /v1/jobs/{job_id}/results?page=1&page_size=50` | Paginated results |
-| `GET /v1/costs/{job_id}` | Cost summary for a job |
-| `GET /v1/audit/{upload_hash}?page=1&page_size=50` | Paginated audit records |
+`POST /api/review/{settlement_id}/decision` requires a JSON body. `decision` is `APPROVE`, `REJECT`, or `MODIFY`; `reason` and `reviewer_id` are strings.
 
 ```bash
-curl -s "http://localhost:8000/v1/jobs?page=1&page_size=10"
+curl -X POST http://localhost:8000/api/review/SETL_0042/decision \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: reviewer-key' \
+  -d '{"decision":"APPROVE","reason":"Verified against bank statement","reviewer_id":"ops"}'
 ```
 
 ```json
-{ "items": [ { "job_id": "...", "status": "completed", "created_at": "..." } ], "total": 1, "page": 1, "page_size": 10, "total_pages": 1 }
+{
+  "settlement_id": "SETL_0042",
+  "decision": "APPROVE",
+  "reason": "Verified against bank statement",
+  "reviewer_id": "ops",
+  "timestamp": "2026-09-05T12:00:00+00:00",
+  "status": "accepted"
+}
 ```
 
----
+`GET /api/review/pending` returns `{ "total_pending": 0, "settlements": [] }`. `GET /api/review/{settlement_id}` returns whether the case has been reviewed and its current result when available.
 
-## Generating the same CSVs used by the demo
+## AuditRecord
+
+`GET /audit/{upload_hash}` returns records with:
+
+```json
+{
+  "id": "uuid",
+  "upload_hash": "sha256",
+  "settlement_id": "SETL_0042",
+  "timestamp": "2026-09-05T12:00:00+00:00",
+  "decision_state": "CLEAN_MATCH",
+  "payload_json": "{...redacted...}",
+  "record_hash": "sha256",
+  "prev_hash": "sha256-or-empty"
+}
+```
 
 ```bash
-PYTHONPATH="$(pwd)" python3 - <<'PY'
-from backend.generator import generate_batch
-import csv, pathlib
-data = generate_batch()
-out = pathlib.Path("data/demo")
-out.mkdir(parents=True, exist_ok=True)
-for name in ["transactions", "settlements", "refunds", "bank_credits"]:
-    with (out / f"{name}.csv").open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=data[name][0].keys())
-        w.writeheader(); w.writerows(data[name])
-print("wrote 4 CSVs to data/demo/")
-PY
+curl http://localhost:8000/audit/<upload_hash>
+curl http://localhost:8000/audit/<upload_hash>/verify
+curl http://localhost:8000/settlement/SETL_0042
 ```
+
+## MetricsResponse
+
+`GET /api/metrics` returns generated time, job/settlement counts, decision breakdown, AI counts, LLM snapshot, Groq quota snapshot, and estimated cost fields. `GET /metrics` returns Prometheus text when `prometheus-client` is installed; otherwise the application returns its fallback text response.
+
+```bash
+curl -H 'X-API-Key: admin-key' http://localhost:8000/api/metrics
+curl http://localhost:8000/metrics
+```
+
+## Health
+
+```bash
+curl http://localhost:8000/health
+```
+
+The deep health response reports overall status and database, LLM, and disk checks.
+
+## Environment
+
+See `.env.example`. `GROQ_API_KEY` is required at application startup. Razorpay keys enable live import. `NIVARA_API_KEY` enables RBAC; `NIVARA_DATABASE_URL` selects the optional database abstraction branch.

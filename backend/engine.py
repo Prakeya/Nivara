@@ -25,6 +25,7 @@ Outcomes:
 """
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any, Optional
@@ -520,6 +521,9 @@ def run_engine(
             Use 1 for T+1 settlements.
     """
     from backend.linking import link_entities
+    from backend.metrics import record_batch, record_settlement
+
+    record_batch()
 
     # Link entities
     linkage_results = link_entities(transactions, settlements, refunds, bank_credits)
@@ -571,9 +575,16 @@ def run_engine(
 
     results: list[ReconciliationResult] = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_reconcile_one, s): s for s in settlements}
+        future_started = {}
+        futures = {}
+        for settlement in settlements:
+            future = executor.submit(_reconcile_one, settlement)
+            futures[future] = settlement
+            future_started[future] = time.perf_counter()
         for future in as_completed(futures):
-            results.append(future.result())
+            result = future.result()
+            results.append(result)
+            record_settlement(result.decision.value, time.perf_counter() - future_started[future])
 
     # Phase 7: AI investigation for MATH_DISCREPANCY cases
     from backend.ai_investigator import investigate_v2

@@ -30,6 +30,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from backend.models import DecisionState, ReconciliationResult, HumanReviewDecision
+from backend.pii_redaction import redact_dict
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +202,7 @@ class AuditLogger:
         if extra_payload:
             payload["extra"] = extra_payload
 
-        payload_json = json.dumps(payload, default=str)
+        payload_json = json.dumps(redact_dict(payload), default=str)
 
         # Hash chain: BEGIN IMMEDIATE ensures exclusive write lock —
         # prevents concurrent reads/inserts from corrupting the chain
@@ -408,7 +409,7 @@ class AuditLogger:
             },
         }
 
-        payload_json = json.dumps(payload, default=str)
+        payload_json = json.dumps(redact_dict(payload), default=str)
 
         # Hash chain for human_review records with BEGIN IMMEDIATE
         assert self._conn is not None
