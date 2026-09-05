@@ -11,8 +11,11 @@ Set NIVARA_SECRET_BACKEND to switch:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 SECRET_BACKEND = os.environ.get("NIVARA_SECRET_BACKEND", "env")
 _secret_cache: dict[str, str] = {}
@@ -50,6 +53,7 @@ def _get_from_aws(name: str) -> Optional[str]:
         except json.JSONDecodeError:
             return secret
     except Exception:
+        logger.exception("Failed to retrieve secret '%s' from AWS Secrets Manager", name)
         return None
 
 
@@ -70,6 +74,7 @@ def _get_from_vault(name: str) -> Optional[str]:
             data = resp.json()
             return data.get("data", {}).get("data", {}).get("value")
     except Exception:
+        logger.exception("Failed to retrieve secret '%s' from HashiCorp Vault", name)
         return None
     return None
 
