@@ -9,10 +9,7 @@ omit = [
     "backend/rbac.py",
     "backend/secret_manager.py",
     "backend/pii_redaction.py",
-    "backend/webhooks.py",
-    "backend/tasks.py",
     "backend/logging_config.py",
-    "backend/semantic_validation.py",
 ]
 
 [tool.coverage.report]
@@ -30,8 +27,5 @@ exclude = [
     "backend/rbac.py",
     "backend/secret_manager.py",
     "backend/pii_redaction.py",
-    "backend/webhooks.py",
-    "backend/tasks.py",
     "backend/logging_config.py",
-    "backend/semantic_validation.py",
 ]

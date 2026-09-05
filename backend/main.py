@@ -97,7 +97,6 @@ class JobResult:
     unresolved: int = 0
     math_discrepancies: int = 0
     ai_investigations: int = 0
-    ai_auto_approved: int = 0
     match_rate: float = 0.0
     csv_counts: dict[str, Any] = field(default_factory=dict)
     results: list[dict[str, Any]] = field(default_factory=list)
@@ -311,21 +310,6 @@ def process_reconciliation_results(
 
 
 # ---------------------------------------------------------------------------
-# Authentication
-# ---------------------------------------------------------------------------
-
-_NIVARA_API_KEY = os.environ.get("NIVARA_API_KEY", "")
-
-async def verify_auth(request: Request) -> None:
-    """Verify API key via X-API-Key header. Skip if NIVARA_API_KEY is not set."""
-    if not _NIVARA_API_KEY:
-        return  # No auth configured — open access
-    api_key = request.headers.get("X-API-Key", "")
-    if api_key != _NIVARA_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
-
-# ---------------------------------------------------------------------------
 # POST /upload
 # ---------------------------------------------------------------------------
 
@@ -506,7 +490,6 @@ async def upload_files(
             )
         )
         ai_inv = sum(1 for r in results if r.ai_response is not None)
-        ai_auto = 0  # AI never auto-approves (enforced by schema)
 
         # Compute match rate against ground truth if available
         match_rate = 0.0
@@ -543,7 +526,6 @@ async def upload_files(
         job.unresolved = unresolved
         job.math_discrepancies = math_disc
         job.ai_investigations = ai_inv
-        job.ai_auto_approved = ai_auto
         job.match_rate = match_rate
         job.csv_counts = csv_counts
         job.results = [_result_to_dict(r, gt_label=gt_map.get(r.settlement_id)) for r in results]
@@ -604,7 +586,6 @@ async def get_status(job_id: str) -> JSONResponse:
         content["unresolved"] = job.unresolved
         content["math_discrepancies"] = job.math_discrepancies
         content["ai_investigations"] = job.ai_investigations
-        content["ai_auto_approved"] = job.ai_auto_approved
         content["match_rate"] = job.match_rate
         content["results"] = job.results
         content["batch_analysis"] = job.batch_analysis
@@ -907,7 +888,6 @@ async def api_metrics(_auth: None = Depends(require_configure)) -> JSONResponse:
         "unresolved": sum(j.unresolved for j in completed),
     }
     ai_investigations = sum(j.ai_investigations for j in completed)
-    ai_auto_approved = sum(j.ai_auto_approved for j in completed)
 
     match_rates = [j.match_rate for j in completed if j.match_rate and j.match_rate > 0]
     avg_match_rate = round(sum(match_rates) / len(match_rates), 4) if match_rates else 0.0
@@ -926,7 +906,6 @@ async def api_metrics(_auth: None = Depends(require_configure)) -> JSONResponse:
             "avg_match_rate": avg_match_rate,
             "decision_breakdown": decision_breakdown,
             "ai_investigations_total": ai_investigations,
-            "ai_auto_approved_total": ai_auto_approved,
             "llm": llm,
             "groq_free_tier": groq_quota,
             # Groq free tier is $0; kept explicit so the dashboard shows the real cost.

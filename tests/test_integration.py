@@ -17,7 +17,6 @@ from backend.engine import run_engine
 from backend.ingestion import ingest_csvs
 from backend.audit import AuditLogger
 from backend.generator import generate_batch
-from backend.csv_schema import CSV_SCHEMAS
 from backend.models import (
     AIResponse,
     AIClassification,
@@ -25,9 +24,19 @@ from backend.models import (
     ReconciliationResult,
 )
 
+# Column names per CSV type, used only as a header fallback when a generated
+# batch has zero rows for that file (inlined from the now-deleted
+# backend/csv_schema.py, which had no other callers).
+_CSV_COLUMNS: dict[str, list[str]] = {
+    "transactions": ["payment_id", "order_id", "amount", "status", "method", "fee", "tax", "created_at"],
+    "settlements": ["settlement_id", "amount", "utr", "status", "created_at", "settled_at"],
+    "refunds": ["refund_id", "payment_id", "amount", "status", "created_at"],
+    "bank_credits": ["utr", "amount", "credited_at", "bank"],
+}
+
 
 def _schema_columns(csv_name: str) -> list[str]:
-    return [c["name"] for c in CSV_SCHEMAS[csv_name]["required_columns"]]
+    return _CSV_COLUMNS[csv_name]
 
 
 def _write_csvs(tmp_path, data: dict) -> str:

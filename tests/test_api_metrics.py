@@ -54,7 +54,6 @@ class TestMetricsEndpoint:
             "math_discrepancy": 0,
             "unresolved": 0,
         }
-        assert body["ai_auto_approved_total"] == 0
         assert body["groq_free_tier"]["daily_limit"] > 0
         assert body["groq_free_tier"]["pct_used"] == 0.0
         assert set(body["llm"]) == {"total_calls", "errors", "avg_latency_ms", "error_rate"}
