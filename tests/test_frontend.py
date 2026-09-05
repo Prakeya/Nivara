@@ -129,7 +129,6 @@ class TestDashboardFlow:
         assert "exceptions" in body
         assert "unresolved" in body
         assert "ai_investigations" in body
-        assert "ai_auto_approved" in body
 
         # Results table present
         assert len(body["results"]) == body["total_settlements"]

@@ -83,6 +83,13 @@ export GROQ_API_KEY=your_groq_key
 uvicorn backend.main:app --reload
 ```
 
+To run the test suite, install dev dependencies (adds `pytest` on top of `requirements.txt`):
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
 For the frontend development server:
 
 ```bash
