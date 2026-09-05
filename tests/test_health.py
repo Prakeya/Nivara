@@ -132,10 +132,15 @@ class TestDeepHealthCheck:
 
 
 class TestHealthEndpoint:
-    def test_health_ok(self):
+    def test_health_ok(self, monkeypatch):
+        monkeypatch.setattr(health, "check_database", lambda: {"status": "ok"})
+        monkeypatch.setattr(health, "check_llm", lambda: {"status": "ok"})
+        monkeypatch.setattr(health, "check_disk", lambda: {"status": "ok", "used_pct": 50})
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json()["status"] == "ok"
+        body = response.json()
+        assert body["status"] == "healthy"
+        assert set(body["checks"]) == {"database", "llm", "disk"}
 
     def test_v1_health_deep(self, monkeypatch):
         monkeypatch.setattr(health, "check_database", lambda: {"status": "ok"})
