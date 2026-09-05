@@ -1,6 +1,6 @@
 """
-Fallback Chain: Groq primary (llama-3.1-70b-versatile) → Groq fallback
-(llama-3.1-8b-instant) → UNRESOLVED.
+Fallback Chain: Groq primary (openai/gpt-oss-20b) → Groq fallback
+(openai/gpt-oss-20b) → UNRESOLVED.
 
 Rules:
 - Pre-flight via GroqRateLimiter (requests/min, tokens/min, daily budget).

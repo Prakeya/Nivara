@@ -36,10 +36,10 @@ DEFAULT_REQUESTS_PER_MIN = 20
 DEFAULT_TOKENS_PER_MIN = 6000
 DEFAULT_TOKENS_PER_DAY = 1_000_000
 
-DEFAULT_MODEL = "llama-3.1-70b-versatile"
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = "openai/gpt-oss-20b"
+FALLBACK_MODEL = "groq/compound-mini"
 
-API_BASE_URL = "https://api.groq.com/openai/v1"
+API_BASE_URL = "https://api.groq.com"
 
 
 # ---------------------------------------------------------------------------

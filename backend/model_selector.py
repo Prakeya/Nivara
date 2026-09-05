@@ -2,8 +2,8 @@
 Model selector: choose the right Groq model based on case complexity.
 
 Decision rule:
-- simple (1-2 evidence types present)  -> llama-3.1-8b-instant     (fast, cheap)
-- complex (3+ evidence types present)  -> llama-3.1-70b-versatile  (capable)
+- simple (1-2 evidence types present)  -> openai/gpt-oss-20b     (fast, cheap)
+- complex (3+ evidence types present)  -> openai/gpt-oss-20b  (capable)
 
 Rationale: most MATH_DISCREPANCY cases need only two evidence kinds (e.g. fee +
 tax). Routing those to the 8B instant model keeps latency low and headroom high
