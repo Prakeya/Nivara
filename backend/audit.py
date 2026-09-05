@@ -165,6 +165,8 @@ class AuditLogger:
         upload_hash: str,
         result: ReconciliationResult,
         extra_payload: Optional[dict[str, Any]] = None,
+        validation_result: Any = None,
+        evidence_packet: Any = None,
     ) -> AuditRecord:
         """Append a reconciliation result to the audit log with hash chain.
 
@@ -197,6 +199,15 @@ class AuditLogger:
                 "raw_confidence": result.ai_response.raw_confidence,
                 "cited_evidence": result.ai_response.cited_evidence,
                 "recommended_action": result.ai_response.recommended_action,
+            }
+
+        if evidence_packet is not None:
+            payload["evidence_packet"] = evidence_packet.model_dump(mode="json")
+
+        if validation_result is not None:
+            payload["validation_result"] = {
+                "is_valid": validation_result.is_valid,
+                "violations": validation_result.violations,
             }
 
         if extra_payload:

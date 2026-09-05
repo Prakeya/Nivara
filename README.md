@@ -9,8 +9,8 @@ Updated with idempotency, live fetch, RBAC, and observability per post-review it
 
 ## Results
 
-- **Tests:** 703 passing
-- **Backend coverage:** 86.26% (`pytest --cov=backend --cov-report=term -q`)
+- **Tests:** 705 passing
+- **Backend coverage:** 86.46% (`pytest --cov=backend --cov-report=term -q`)
 - **Compile check:** `COMPILE_OK`
 - **Frontend build:** Vite build passes
 - **AI auto-approval:** AI remains advisory and review decisions are explicit
@@ -58,6 +58,8 @@ CSV uploads are hashed before ingestion. Completed jobs with durable audit recor
 - Human review queue and decision endpoint.
 - JSON metrics, optional Prometheus exposition, and correlation request IDs.
 - React/Vite dashboard with Razorpay date-range selection.
+
+DeterministicGuard, AIValidator, and ModelSelector are fully wired into the `/upload` and `/api/reconcile-razorpay` pipelines. The Guard prevents AI override, the Selector chooses a model by evidence complexity, and the Validator rejects invalid citations before results reach human reviewers.
 
 ## Current Scope & Limitations
 
@@ -133,7 +135,7 @@ python3 -m compileall -q backend
 cd frontend && npm run build
 ```
 
-The measured baseline is 703 passing tests and 86.26% backend coverage. A dedicated mypy/bandit clean result is not claimed because those tools are not configured as repository quality gates.
+The measured baseline is 705 passing tests and 86.46% backend coverage. A dedicated mypy/bandit clean result is not claimed because those tools are not configured as repository quality gates.
 
 ## Scaling to Production
 

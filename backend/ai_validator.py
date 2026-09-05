@@ -48,6 +48,40 @@ class AIValidationResult:
     error: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class ValidationResult:
+    """Small orchestration-facing validation result."""
+
+    is_valid: bool
+    violations: list[str] = field(default_factory=list)
+
+
+class AIValidator:
+    """Validate an already parsed AI response against its evidence packet."""
+
+    @staticmethod
+    def validate(
+        ai_response: Optional[AIResponse],
+        evidence_packet: Optional[EvidencePacketV2],
+        expected_paise: int = 0,
+        actual_paise: int = 0,
+    ) -> ValidationResult:
+        del expected_paise, actual_paise
+        if ai_response is None:
+            return ValidationResult(False, ["AI response is missing"])
+        from backend.deterministic_guard import (
+            validate_ai_citations as validate_guard_citations,
+            validate_ai_response as validate_guard_response,
+        )
+
+        violations = validate_guard_response(ai_response)
+        if evidence_packet is None:
+            violations.append("Evidence packet is missing")
+        else:
+            violations.extend(validate_guard_citations(ai_response, evidence_packet))
+        return ValidationResult(not violations, violations)
+
+
 # Provider cost per 1K tokens (INR)
 PROVIDER_COST_PER_1K = {
     "openai": 0.002,

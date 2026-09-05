@@ -59,3 +59,11 @@ def select_model(evidence_packet: Optional[EvidencePacketV2]) -> str:
     """
     complexity = evidence_complexity(evidence_packet)
     return MODEL_FOR_COMPLEXITY[complexity]
+
+
+class ModelSelector:
+    """Orchestration facade for evidence-complexity model selection."""
+
+    @staticmethod
+    def select(evidence_packet: Optional[EvidencePacketV2]) -> str:
+        return select_model(evidence_packet)

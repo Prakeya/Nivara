@@ -950,6 +950,7 @@ def investigate_v2(
     expected_amount_paise: int,
     actual_amount_paise: int,
     difference_paise: int,
+    model_name: Optional[str] = None,
 ) -> Optional[AIResponse]:
     """
     Investigate a MATH_DISCREPANCY using EvidencePacketV2.
@@ -987,7 +988,7 @@ def investigate_v2(
     ]
 
     # Pick model by evidence complexity, then call the Groq fallback chain
-    selected_model = select_model(evidence_packet_v2)
+    selected_model = model_name or select_model(evidence_packet_v2)
     fallback_result = call_with_fallback(
         messages=messages,
         primary_model=selected_model,
