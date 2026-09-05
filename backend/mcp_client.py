@@ -148,7 +148,13 @@ class RazorpayMCPClient:
                 timeout=30.0,
             )
             response.raise_for_status()
-            return response.json().get("items", [])
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError("Razorpay response payload is not an object")
+            items = payload.get("items", [])
+            if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+                raise RuntimeError("Razorpay response items are not objects")
+            return items
         except Exception as exc:
             raise RuntimeError(f"Razorpay {resource} API error: {exc}") from exc
 
