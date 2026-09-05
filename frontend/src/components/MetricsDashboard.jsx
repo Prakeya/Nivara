@@ -72,7 +72,7 @@ function GroqQuotaBar({ quota, activeAi }) {
         />
       </div>
       <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
-        llama-3.1-70b &middot; {Object.entries(quota.by_model || {}).length || 0} model(s) reporting
+        openai/gpt-oss-20b &middot; {Object.entries(quota.by_model || {}).length || 0} model(s) reporting
       </div>
     </div>
   );

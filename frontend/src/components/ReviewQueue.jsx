@@ -1,6 +1,6 @@
 import React from 'react';
 function ReviewQueue({ results, onSelect, onReview }) {
-  const queue = results.filter(r => r.escalate_to_human);
+  const queue = results.filter(r => r.escalate_to_human && (!r.resolution_status || r.resolution_status === "OPEN"));
 
   const badgeClass = (state) => {
     if (state === "MATH_DISCREPANCY") return "math";
