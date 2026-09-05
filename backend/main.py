@@ -975,7 +975,7 @@ app.include_router(v1_router)
 async def fetch_razorpay(
     request: Request,
     body: dict[str, Any],
-    _auth: None = Depends(verify_auth),
+    _auth: None = Depends(require_upload),
 ) -> JSONResponse:
     """Fetch settlements live from Razorpay and run reconciliation.
 
@@ -1043,7 +1043,7 @@ async def fetch_razorpay(
 async def reconcile_razorpay(
     request: Request,
     body: dict[str, Any],
-    _auth: None = Depends(verify_auth),
+    _auth: None = Depends(require_upload),
 ) -> JSONResponse:
     """Fetch settlements from Razorpay AND run reconciliation in one call.
 
