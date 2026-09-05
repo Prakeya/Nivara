@@ -9,7 +9,7 @@
 
 **Track 04 — AI Finance Controller** · Razorpay Buildathon 2026
 
-[Demo Video](PASTE_VIDEO_URL_HERE) · [Repo](PASTE_REPO_URL_HERE)
+[Demo Video](https://drive.google.com/drive/folders/1s3RJJDZQJffwuXuZOAozX4jyxttwLKLP?usp=sharing) · [Repo](https://github.com/Prakeya/Nivara/tree/main)
 
 ---
 
@@ -289,12 +289,15 @@ pytest --cov=backend --cov-report=term -q
 
 ## Demo
 
-**[Watch the demo →](PASTE_VIDEO_URL_HERE)**
+**[Watch the demo →](https://drive.google.com/drive/folders/1s3RJJDZQJffwuXuZOAozX4jyxttwLKLP?usp=sharing)**
 
-![Upload flow](PASTE_SCREENSHOT_PATH_HERE)
-![Dashboard / results](PASTE_SCREENSHOT_PATH_HERE)
-![Human review queue](PASTE_SCREENSHOT_PATH_HERE)
-![Audit trail](PASTE_SCREENSHOT_PATH_HERE)
+| [![Upload flow](https://drive.google.com/thumbnail?id=10I02TWGESUp7Hxkowie0k_5rxsdy_i8g&sz=w1000)](https://drive.google.com/file/d/10I02TWGESUp7Hxkowie0k_5rxsdy_i8g/view?usp=sharing) | [![Dashboard / results](https://drive.google.com/thumbnail?id=1DOOKQri_9DILnuOVG0GL3BGMRL_OnxRu&sz=w1000)](https://drive.google.com/file/d/1DOOKQri_9DILnuOVG0GL3BGMRL_OnxRu/view?usp=sharing) |
+|:---:|:---:|
+| **Upload flow** | **Dashboard / results** |
+
+| [![Human review queue](https://drive.google.com/thumbnail?id=1gS704FCdzjWkPrlcU28ogF3r5HdaEsEa&sz=w1000)](https://drive.google.com/file/d/1gS704FCdzjWkPrlcU28ogF3r5HdaEsEa/view?usp=sharing) | [![Audit trail](https://drive.google.com/thumbnail?id=1RhA1vY4UZQZPtb-Q1b4yzzH_Aa5JEuhN&sz=w1000)](https://drive.google.com/file/d/1RhA1vY4UZQZPtb-Q1b4yzzH_Aa5JEuhN/view?usp=sharing) |
+|:---:|:---:|
+| **Human review queue** | **Audit trail** |
 
 The demo covers the reconciliation problem, the live upload → deterministic engine → AI classification → human review → audit trail flow, and the measured evaluation results above.
 
