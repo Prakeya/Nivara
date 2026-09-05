@@ -550,7 +550,7 @@ class TestProductionLLMPath:
     def test_missing_api_key_returns_none(self):
         """_get_llm_client() returns None when GROQ_API_KEY is not set."""
         import os
-        from backend.main import _get_llm_client
+        from backend.api_helpers import _get_llm_client
 
         old_key = os.environ.pop("GROQ_API_KEY", None)
         try:
@@ -563,7 +563,7 @@ class TestProductionLLMPath:
     def test_invalid_api_key_returns_configured(self):
         """_get_llm_client() returns truthy value when GROQ_API_KEY is set."""
         import os
-        from backend.main import _get_llm_client
+        from backend.api_helpers import _get_llm_client
 
         old_key = os.environ.get("GROQ_API_KEY")
         os.environ["GROQ_API_KEY"] = "gsk-test-invalid-key-for-testing"

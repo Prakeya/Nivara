@@ -22,7 +22,8 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs
+from backend.main import app
+from backend.job_store import _jobs
 from backend.generator import generate_batch
 
 client = TestClient(app)
@@ -65,7 +66,7 @@ class TestGroundTruthEvaluationExceptionHandling:
         data = generate_batch()
         files = _make_upload_files(data)
 
-        monkeypatch.setattr("backend.main.os.path.exists", lambda _p: True)
+        monkeypatch.setattr("backend.routes.upload.os.path.exists", lambda _p: True)
 
         real_open = builtins.open
 

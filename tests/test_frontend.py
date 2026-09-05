@@ -13,7 +13,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs
+from backend.main import app
+from backend.job_store import _jobs
 
 client = TestClient(app)
 

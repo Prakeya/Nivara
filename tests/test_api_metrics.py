@@ -11,7 +11,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from backend.main import app, _jobs
+from backend.main import app
+from backend.job_store import _jobs
 from backend.metrics import (
     record_groq_usage,
     groq_daily_usage_snapshot,
