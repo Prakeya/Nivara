@@ -526,8 +526,15 @@ async def upload_files(
                     batch_start = time.time()
                     metrics = evaluate_batch(results, gt_list, batch_time_seconds=0.0, ai_client_available=llm_client is not None)
                     match_rate = metrics.match_rate
-            except Exception as exc:
-                logger.warning("Ground truth evaluation failed: %s", exc)  # Ground truth not available or mismatched — skip
+            except FileNotFoundError:
+                # Expected/benign: no ground truth file configured for this run.
+                # Evaluation is optional — skip it quietly.
+                logger.info("Ground truth file not found at %s; skipping evaluation", gt_path)
+            except Exception:
+                # Real failure: malformed JSON, or evaluate_batch raised. Non-fatal —
+                # the reconciliation flow continues, but capture the traceback so it's
+                # distinguishable from the expected-missing-file case above.
+                logger.exception("Ground truth evaluation failed unexpectedly")
 
         job.status = "completed"
         job.total_settlements = len(results)
