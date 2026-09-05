@@ -15,7 +15,7 @@ import logging
 import os
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nivara.secret_manager")
 
 SECRET_BACKEND = os.environ.get("NIVARA_SECRET_BACKEND", "env")
 _secret_cache: dict[str, str] = {}

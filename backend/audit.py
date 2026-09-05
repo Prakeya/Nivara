@@ -33,7 +33,7 @@ from uuid import uuid4
 from backend.models import DecisionState, ReconciliationResult, HumanReviewDecision
 from backend.pii_redaction import redact_dict
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nivara.audit")
 
 
 # ---------------------------------------------------------------------------
